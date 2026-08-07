@@ -729,6 +729,7 @@
 }
 .decision-approved { color: var(--green); }
 .decision-rejected { color: var(--red); }
+.decision-deploying { color: var(--text-muted); }
 
 /* Empty / loader states */
 .empty-tasks {
@@ -758,4 +759,92 @@
   color: var(--text-muted);
   padding: 8px 0 4px;
   text-align: center;
+}
+
+/* SSE connection status */
+.connection-status {
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+}
+
+.status-connected {
+  color: var(--green);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.status-disconnected {
+  color: var(--amber);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
+}
+
+.status-connected .status-dot {
+  box-shadow: 0 0 8px var(--green);
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+
+.status-disconnected .status-dot {
+  box-shadow: 0 0 8px var(--amber);
+  animation: pulse-glow 1.5s infinite ease-in-out;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+
+/* Accessibility classes */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 20px;
+  background: var(--accent);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+  z-index: 9999;
+  font-size: 12px;
+  font-weight: 500;
+  transition: top 0.2s ease;
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  top: 10px;
+  outline: 2px solid var(--accent);
+}
+
+/* Focus styles for keyboard accessibility */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.session-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
