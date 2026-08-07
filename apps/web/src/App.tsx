@@ -1,436 +1,582 @@
 import { useState, useEffect } from 'react';
 import './App.css';
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 interface PlaygroundSession {
   id: string;
   name: string;
   template: string;
   status: string;
   createdAt: string;
-  agentTasks?: any[];
+  agentTasks?: AgentTask[];
 }
 
-function RenderDiff({ codeDiffStr, infraDiffStr }: { codeDiffStr: string | null, infraDiffStr: string | null }) {
+interface AgentTask {
+  id: string;
+  prompt: string;
+  status: string;
+  codeDiff: string | null;
+  infraDiff: string | null;
+  createdAt: string;
+  completedAt?: string;
+  approved: boolean | null;
+}
+
+// ─── Diff Renderer ────────────────────────────────────────────────────────────
+
+function DiffViewer({ codeDiffStr, infraDiffStr }: { codeDiffStr: string | null; infraDiffStr: string | null }) {
   if (!codeDiffStr && !infraDiffStr) return null;
 
   let codeDiff: any = null;
   let infraDiff: any = null;
+  try { if (codeDiffStr)  codeDiff  = JSON.parse(codeDiffStr);  } catch {}
+  try { if (infraDiffStr) infraDiff = JSON.parse(infraDiffStr); } catch {}
 
-  try {
-    if (codeDiffStr) codeDiff = JSON.parse(codeDiffStr);
-  } catch (e) {}
-
-  try {
-    if (infraDiffStr) infraDiff = JSON.parse(infraDiffStr);
-  } catch (e) {}
+  const actionClass = (a: string) =>
+    a === 'create' ? 'action-create' : a === 'delete' ? 'action-delete' : 'action-update';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
-      {codeDiff?.files && codeDiff.files.map((file: any, idx: number) => (
-        <div key={idx} style={{ border: '1px solid #334155', borderRadius: '6px', overflow: 'hidden' }}>
-          <div style={{ backgroundColor: '#1e293b', padding: '8px 12px', borderBottom: '1px solid #334155', fontSize: '13px', fontWeight: 'bold', color: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>📄 {file.path}</span>
-            <span style={{ fontSize: '11px', textTransform: 'uppercase', color: file.action === 'create' ? '#10b981' : file.action === 'delete' ? '#ef4444' : '#60a5fa', fontWeight: 'bold' }}>
+    <div className="diff-viewer">
+      {codeDiff?.files?.map((file: any, idx: number) => (
+        <div key={idx} className="diff-file">
+          <div className="diff-file-header">
+            <span className="diff-file-path">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style={{ color: 'var(--text-muted)' }}>
+                <path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 8.75 4.25V1.5Zm6.75.103V4.25c0 .138.112.25.25.25h2.647Z"/>
+              </svg>
+              {file.path}
+            </span>
+            <span className={`diff-action-tag ${actionClass(file.action || 'update')}`}>
               {file.action || 'update'}
             </span>
           </div>
-          <pre style={{ margin: 0, padding: '12px', fontSize: '12px', overflowX: 'auto', backgroundColor: '#0b0f19', fontFamily: 'monospace', color: '#cbd5e1', lineHeight: '1.5' }}>
-            {file.diff && file.diff.split('\n').map((line: string, lIdx: number) => {
-              let color = '#cbd5e1';
-              let bgColor = 'transparent';
-              if (line.startsWith('+')) {
-                color = '#34d399';
-                bgColor = 'rgba(16, 185, 129, 0.1)';
-              } else if (line.startsWith('-')) {
-                color = '#f87171';
-                bgColor = 'rgba(239, 68, 68, 0.1)';
-              }
-              return (
-                <div key={lIdx} style={{ color, backgroundColor: bgColor, paddingLeft: '4px' }}>
-                  {line}
-                </div>
-              );
+          <pre className="diff-code">
+            {file.diff?.split('\n').map((line: string, li: number) => {
+              const cls = line.startsWith('+') ? 'diff-line-add'
+                        : line.startsWith('-') ? 'diff-line-del'
+                        : 'diff-line-ctx';
+              return <span key={li} className={cls}>{line || ' '}</span>;
             })}
           </pre>
         </div>
       ))}
 
       {infraDiff?.zeropsYaml && (
-        <div style={{ border: '1px solid #334155', borderRadius: '6px', overflow: 'hidden' }}>
-          <div style={{ backgroundColor: '#1e293b', padding: '8px 12px', borderBottom: '1px solid #334155', fontSize: '13px', fontWeight: 'bold', color: '#f8fafc' }}>
-            ⚙️ zerops.yaml Configuration
+        <div className="infra-block">
+          <div className="infra-header">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style={{ color: 'var(--amber)' }}>
+              <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Zm7-3.25v2.992l2.028.812a.75.75 0 0 1-.557 1.392l-2.5-1A.751.751 0 0 1 7 8.25v-3.5a.75.75 0 0 1 1.5 0Z"/>
+            </svg>
+            zerops.yaml — Infrastructure Config
           </div>
-          <pre style={{ margin: 0, padding: '12px', fontSize: '12px', overflowX: 'auto', backgroundColor: '#0b0f19', fontFamily: 'monospace', color: '#cbd5e1', lineHeight: '1.5' }}>
-            {infraDiff.zeropsYaml}
-          </pre>
+          <pre className="infra-code">{infraDiff.zeropsYaml}</pre>
         </div>
       )}
     </div>
   );
 }
 
-function App() {
-  const [sessions, setSessions] = useState<PlaygroundSession[]>([]);
-  const [activeSession, setActiveSession] = useState<PlaygroundSession | null>(null);
+// ─── Status Badge ─────────────────────────────────────────────────────────────
+
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    active: 'pill-green', completed: 'pill-blue',
+    failed: 'pill-red',   pending: 'pill-amber',
+  };
+  return (
+    <span className={`pill ${map[status] ?? 'pill-amber'}`}>
+      {status}
+    </span>
+  );
+}
+
+// ─── Task Status Badge ────────────────────────────────────────────────────────
+
+function TaskBadge({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    pending:    'status-pending',
+    processing: 'status-processing',
+    completed:  'status-completed',
+    failed:     'status-failed',
+  };
+  const icon =
+    status === 'processing' ? (
+      <span className="spinning" style={{ display: 'inline-flex' }}>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+        </svg>
+      </span>
+    ) : status === 'completed' ? (
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+    ) : status === 'failed' ? (
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
+        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    ) : (
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
+        <circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
+      </svg>
+    );
+  return (
+    <span className={`status-badge ${map[status] ?? 'status-pending'}`}>
+      {icon} {status}
+    </span>
+  );
+}
+
+// ─── App ──────────────────────────────────────────────────────────────────────
+
+export default function App() {
+  const [sessions, setSessions]           = useState<PlaygroundSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [activeSession, setActiveSession] = useState<PlaygroundSession | null>(null);
 
-  // Health states
-  const [apiHealth, setApiHealth] = useState<{ status: string; service: string } | null>(null);
-  const [dbHealth, setDbHealth] = useState<{ status: string; db: string } | null>(null);
-  
-  // Form states
-  const [newSessionName, setNewSessionName] = useState('');
-  const [newSessionTemplate, setNewSessionTemplate] = useState('node-api-basic');
-  
-  // Task runner states
-  const [taskPrompt, setTaskPrompt] = useState('');
+  const [apiHealth, setApiHealth]   = useState<{ status: string } | null>(null);
+  const [dbHealth,  setDbHealth]    = useState<{ status: string; db?: string } | null>(null);
+
+  const [newName,     setNewName]     = useState('');
+  const [newTemplate, setNewTemplate] = useState('node-api-basic');
+  const [taskPrompt,  setTaskPrompt]  = useState('');
   const [runningTask, setRunningTask] = useState(false);
-  
-  // Loading & Error states
-  const [loadingHealth, setLoadingHealth] = useState(true);
+
+  const [loadingHealth,   setLoadingHealth]   = useState(true);
   const [loadingSessions, setLoadingSessions] = useState(true);
-  const [loadingDetails, setLoadingDetails] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loadingDetails,  setLoadingDetails]  = useState(false);
+  const [error, setError]                     = useState<string | null>(null);
 
-  // Load health and list sessions
+  useEffect(() => { refreshHealth(); fetchSessions(); }, []);
+
   useEffect(() => {
-    refreshHealth();
-    fetchSessions();
-  }, []);
-
-  // Poll for active session details if a session is selected
-  useEffect(() => {
-    if (!activeSessionId) {
-      setActiveSession(null);
-      return;
-    }
-
+    if (!activeSessionId) { setActiveSession(null); return; }
     fetchSessionDetails(activeSessionId);
-    
-    // Set up polling for task status updates in the active session
-    const interval = setInterval(() => {
-      fetchSessionDetails(activeSessionId, true); // silent refresh
-    }, 3000);
-
-    return () => clearInterval(interval);
+    const iv = setInterval(() => fetchSessionDetails(activeSessionId, true), 3000);
+    return () => clearInterval(iv);
   }, [activeSessionId]);
+
+  const API = 'http://localhost:8080';
 
   const refreshHealth = () => {
     setLoadingHealth(true);
     Promise.all([
-      fetch('http://localhost:8080/health').then(res => res.json()).catch(() => null),
-      fetch('http://localhost:8080/api/health/db').then(res => res.json()).catch(() => null)
-    ]).then(([api, db]) => {
-      setApiHealth(api);
-      setDbHealth(db);
-      setLoadingHealth(false);
-    });
+      fetch(`${API}/health`).then(r => r.json()).catch(() => null),
+      fetch(`${API}/api/health/db`).then(r => r.json()).catch(() => null),
+    ]).then(([api, db]) => { setApiHealth(api); setDbHealth(db); setLoadingHealth(false); });
   };
 
   const fetchSessions = async () => {
     setLoadingSessions(true);
     try {
-      const res = await fetch('http://localhost:8080/api/sessions');
-      if (!res.ok) throw new Error('Failed to fetch sessions');
-      const data = await res.json();
-      setSessions(data);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoadingSessions(false);
-    }
+      const r = await fetch(`${API}/api/sessions`);
+      if (!r.ok) throw new Error('Failed to fetch sessions');
+      setSessions(await r.json());
+    } catch (e: any) { setError(e.message); }
+    finally { setLoadingSessions(false); }
   };
 
   const fetchSessionDetails = async (id: string, silent = false) => {
     if (!silent) setLoadingDetails(true);
     try {
-      const res = await fetch(`http://localhost:8080/api/sessions/${id}`);
-      if (!res.ok) throw new Error('Failed to fetch session details');
-      const data = await res.json();
-      setActiveSession(data);
-    } catch (err: any) {
-      if (!silent) setError(err.message);
-    } finally {
-      if (!silent) setLoadingDetails(false);
-    }
+      const r = await fetch(`${API}/api/sessions/${id}`);
+      if (!r.ok) throw new Error('Failed to load session');
+      setActiveSession(await r.json());
+    } catch (e: any) { if (!silent) setError(e.message); }
+    finally { if (!silent) setLoadingDetails(false); }
+  };
+
+  const handleCreateSession = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newName.trim()) return;
+    try {
+      const r = await fetch(`${API}/api/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName, template: newTemplate }),
+      });
+      if (!r.ok) throw new Error('Failed to create session');
+      const s = await r.json();
+      setNewName('');
+      await fetchSessions();
+      setActiveSessionId(s.id);
+    } catch (e: any) { setError(e.message); }
   };
 
   const handleRunAgent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!taskPrompt.trim() || !activeSessionId) return;
-
     setRunningTask(true);
     try {
-      const res = await fetch(`http://localhost:8080/api/sessions/${activeSessionId}/tasks`, {
+      const r = await fetch(`${API}/api/sessions/${activeSessionId}/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: taskPrompt }),
       });
-      if (!res.ok) throw new Error('Failed to submit task');
+      if (!r.ok) throw new Error('Failed to submit task');
       setTaskPrompt('');
       await fetchSessionDetails(activeSessionId);
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      setRunningTask(false);
-    }
+    } catch (e: any) { setError(e.message); }
+    finally { setRunningTask(false); }
   };
 
   const handleApproveTask = async (taskId: string) => {
     try {
-      const res = await fetch(`http://localhost:8080/api/tasks/${taskId}/approve`, {
-        method: 'POST',
-      });
-      if (!res.ok) throw new Error('Failed to approve task');
-      const data = await res.json();
-      alert(data.message || 'Task approved successfully!');
+      const r = await fetch(`${API}/api/tasks/${taskId}/approve`, { method: 'POST' });
+      if (!r.ok) throw new Error('Failed to approve');
+      const d = await r.json();
+      setError(null);
       if (activeSessionId) await fetchSessionDetails(activeSessionId);
-    } catch (err: any) {
-      alert(err.message);
-    }
+      // Show a non-blocking banner instead of alert
+      console.info('[Approved]', d.message);
+    } catch (e: any) { setError(e.message); }
   };
 
   const handleRejectTask = async (taskId: string) => {
     try {
-      const res = await fetch(`http://localhost:8080/api/tasks/${taskId}/reject`, {
-        method: 'POST',
-      });
-      if (!res.ok) throw new Error('Failed to reject task');
-      alert('Task rejected.');
+      const r = await fetch(`${API}/api/tasks/${taskId}/reject`, { method: 'POST' });
+      if (!r.ok) throw new Error('Failed to reject');
       if (activeSessionId) await fetchSessionDetails(activeSessionId);
-    } catch (err: any) {
-      alert(err.message);
-    }
+    } catch (e: any) { setError(e.message); }
   };
 
-  const handleCreateSession = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newSessionName.trim()) return;
+  const dotClass = (status: string) =>
+    status === 'active' ? 'dot-active' : status === 'completed' ? 'dot-completed' : 'dot-failed';
 
-    try {
-      const res = await fetch('http://localhost:8080/api/sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newSessionName, template: newSessionTemplate }),
-      });
-      if (!res.ok) throw new Error('Failed to create session');
-      const newSession = await res.json();
-      setNewSessionName('');
-      await fetchSessions();
-      setActiveSessionId(newSession.id);
-    } catch (err: any) {
-      alert(err.message);
-    }
-  };
+  const templateLabel = (t: string) =>
+    t === 'node-api-basic'    ? 'Node.js API'
+    : t === 'react-static-basic' ? 'React Static'
+    : t === 'python-api-basic'   ? 'Python API'
+    : t;
+
+  // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="app-container" style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+    <>
+      {/* Full-width error banner outside layout */}
       {error && (
-        <div style={{ backgroundColor: '#ef4444', color: 'white', padding: '10px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px', fontWeight: 'bold' }}>
-          <span>Error: {error}</span>
-          <button onClick={() => setError(null)} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', fontSize: '16px' }}>✕</button>
+        <div className="error-banner" id="error-banner">
+          <span>⚠ {error}</span>
+          <button onClick={() => setError(null)} aria-label="Dismiss error" style={{ display: 'inline-flex', alignItems: 'center' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
         </div>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', width: '100%', flexGrow: 1 }}>
-        {/* Sidebar */}
+
+      <div className="layout">
+        {/* ── Sidebar ──────────────────────────────────────────────── */}
         <aside className="sidebar">
-          <div className="sidebar-header">
-            <h1 className="logo-text">Zerops Agent</h1>
-            <span className="logo-badge">Playground</span>
-          </div>
-
-          {/* Health status widget */}
-          <div className="health-card">
-            <div className="health-card-header">
-              <h3>System Status {loadingHealth ? '...' : ''}</h3>
-              <button onClick={refreshHealth} className="btn-icon" title="Refresh health">↻</button>
+          {/* Logo */}
+          <div className="sidebar-logo">
+            <div className="logo-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="white">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+              </svg>
             </div>
-          <div className="health-row">
-            <span>API Server:</span>
-            {apiHealth ? (
-              <span className="status-pill status-ok">Online</span>
-            ) : (
-              <span className="status-pill status-error">Offline</span>
-            )}
+            <span className="logo-name">Zerops Agent</span>
+            <span className="logo-tag">Playground</span>
           </div>
-          <div className="health-row">
-            <span>Database:</span>
-            {dbHealth && dbHealth.status === 'ok' ? (
-              <span className="status-pill status-ok">Connected</span>
-            ) : (
-              <span className="status-pill status-error">Disconnected</span>
-            )}
-          </div>
-        </div>
 
-        {/* Create Session Form */}
-        <div className="sidebar-section">
-          <h3>Create Playground</h3>
-          <form onSubmit={handleCreateSession} className="create-form">
-            <input
-              type="text"
-              placeholder="Session Name (e.g. My Sandbox)"
-              value={newSessionName}
-              onChange={(e) => setNewSessionName(e.target.value)}
-              className="form-input"
-            />
-            <select
-              value={newSessionTemplate}
-              onChange={(e) => setNewSessionTemplate(e.target.value)}
-              className="form-select"
-            >
-              <option value="node-api-basic">Node.js API Basic</option>
-              <option value="react-static-basic">React Static Basic</option>
-              <option value="python-api-basic">Python API Basic</option>
-            </select>
-            <button type="submit" className="btn-primary">Create Session</button>
-          </form>
-        </div>
+          <div className="sidebar-body">
+            {/* System Status */}
+            <div className="sidebar-section">
+              <div className="section-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                System Status
+                <button className="health-refresh" onClick={refreshHealth} title="Refresh" id="btn-refresh-health">
+                  {loadingHealth ? <span className="spinning">↻</span> : '↻'}
+                </button>
+              </div>
+              <div className="health-grid">
+                <div className="health-row">
+                  <span className="health-label">API Server</span>
+                  {apiHealth?.status === 'ok'
+                    ? <span className="pill pill-green" id="status-api">Online</span>
+                    : <span className="pill pill-red"   id="status-api">Offline</span>}
+                </div>
+                <div className="health-row">
+                  <span className="health-label">Database</span>
+                  {dbHealth?.status === 'ok'
+                    ? <span className="pill pill-green" id="status-db">Connected</span>
+                    : <span className="pill pill-red"   id="status-db">Down</span>}
+                </div>
+              </div>
+            </div>
 
-        {/* Sessions List */}
-        <div className="sidebar-section list-section">
-          <h3>Active Playgrounds</h3>
-          {loadingSessions ? (
-            <div className="loader">Loading sessions...</div>
-          ) : sessions.length === 0 ? (
-            <div className="empty-state">No playgrounds created yet.</div>
-          ) : (
-            <div className="session-list">
-              {sessions.map((session) => (
-                <div
-                  key={session.id}
-                  onClick={() => setActiveSessionId(session.id)}
-                  className={`session-item ${activeSessionId === session.id ? 'active' : ''}`}
+            <div className="sidebar-divider" />
+
+            {/* New Session */}
+            <div className="sidebar-section">
+              <div className="section-label">New Playground</div>
+              <form className="create-form" onSubmit={handleCreateSession} id="form-create-session">
+                <input
+                  id="input-session-name"
+                  className="field-input"
+                  type="text"
+                  placeholder="Session name…"
+                  value={newName}
+                  onChange={e => setNewName(e.target.value)}
+                />
+                <select
+                  id="select-template"
+                  className="field-select"
+                  value={newTemplate}
+                  onChange={e => setNewTemplate(e.target.value)}
                 >
-                  <div className="session-item-header">
-                    <h4>{session.name}</h4>
-                    <span className={`badge badge-${session.status}`}>{session.status}</span>
-                  </div>
-                  <div className="session-item-footer">
-                    <span>{session.template}</span>
-                    <span>{new Date(session.createdAt).toLocaleDateString()}</span>
-                  </div>
-                </div>
-              ))}
+                  <option value="node-api-basic">Node.js API Basic</option>
+                  <option value="react-static-basic">React Static Basic</option>
+                  <option value="python-api-basic">Python API Basic</option>
+                </select>
+                <button id="btn-create-session" type="submit" className="btn-primary">
+                  Create Session
+                </button>
+              </form>
             </div>
-          )}
-        </div>
-      </aside>
 
-      {/* Main Content Area */}
-      <main className="main-content">
-        {activeSessionId ? (
-          loadingDetails && !activeSession ? (
-            <div className="full-loader">Loading playground info...</div>
+            <div className="sidebar-divider" />
+
+            {/* Session List */}
+            <div className="sidebar-section" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+              <div className="section-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                Playgrounds
+                <span className="tasks-count">{sessions.length}</span>
+              </div>
+
+              {loadingSessions ? (
+                <div className="empty-text">Loading…</div>
+              ) : sessions.length === 0 ? (
+                <div className="empty-text">No sessions yet.</div>
+              ) : (
+                <div className="session-list">
+                  {sessions.map(s => (
+                    <div
+                      key={s.id}
+                      id={`session-item-${s.id}`}
+                      className={`session-item ${activeSessionId === s.id ? 'selected' : ''}`}
+                      onClick={() => setActiveSessionId(s.id)}
+                    >
+                      <div className="session-item-top">
+                        <span className="session-name">
+                          <span className={`status-dot ${dotClass(s.status)}`} />
+                          {s.name}
+                        </span>
+                        <StatusBadge status={s.status} />
+                      </div>
+                      <div className="session-meta">
+                        <span>{templateLabel(s.template)}</span>
+                        <span>·</span>
+                        <span>{new Date(s.createdAt).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </aside>
+
+        {/* ── Main ──────────────────────────────────────────────────── */}
+        <main className="main">
+          {!activeSessionId ? (
+            /* Welcome screen */
+            <div className="welcome">
+              <div className="welcome-inner">
+                <span className="welcome-icon">
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="var(--accent)">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                  </svg>
+                </span>
+                <h1 className="welcome-title">Zerops Agent Playground</h1>
+                <p className="welcome-sub">
+                  A sandbox for testing autonomous coding agents on live Zerops infrastructure.
+                  Create a session, prompt the agent, review diffs, and deploy — all in one place.
+                </p>
+                <div className="welcome-steps">
+                  {[
+                    ['Create a session', 'Pick a stack template and give your playground a name.'],
+                    ['Prompt the agent', 'Describe a code change — the agent will generate real diffs.'],
+                    ['Review & approve', 'Inspect code and infra diffs, then approve or reject.'],
+                    ['Auto-deploy', 'Approved diffs trigger a live Zerops deployment automatically.'],
+                  ].map(([title, desc], i) => (
+                    <div className="welcome-step" key={i}>
+                      <div className="step-num">{i + 1}</div>
+                      <div className="step-text">
+                        <strong>{title}</strong> — {desc}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : loadingDetails && !activeSession ? (
+            <div className="center-loader">
+              <span className="spinning" style={{ display: 'inline-flex' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round">
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                </svg>
+              </span>
+              Loading playground…
+            </div>
           ) : activeSession ? (
-            <div className="playground-dashboard">
-              {/* Session Overview */}
-              <header className="playground-header">
+            <div className="playground" id="playground-panel">
+              {/* Top bar */}
+              <div className="pg-topbar">
                 <div>
-                  <span className="detail-tag">PLAYGROUND SESSION</span>
-                  <h2>{activeSession.name}</h2>
-                  <p className="meta-text">
-                    ID: <code>{activeSession.id}</code> | Template: <strong>{activeSession.template}</strong> | Created: {new Date(activeSession.createdAt).toLocaleString()}
-                  </p>
+                  <div className="pg-breadcrumb">Playground Session</div>
+                  <div className="pg-title">{activeSession.name}</div>
+                  <div className="pg-meta">
+                    <span className="pg-meta-item">
+                      ID <code id="session-id-display">{activeSession.id}</code>
+                    </span>
+                    <span className="pg-meta-item">·</span>
+                    <span className="pg-meta-item">
+                      Template <code>{templateLabel(activeSession.template)}</code>
+                    </span>
+                    <span className="pg-meta-item">·</span>
+                    <span className="pg-meta-item">
+                      {new Date(activeSession.createdAt).toLocaleString()}
+                    </span>
+                  </div>
                 </div>
-                <div className="header-actions">
-                  <span className={`badge-large status-${activeSession.status}`}>{activeSession.status.toUpperCase()}</span>
-                </div>
-              </header>
+                <StatusBadge status={activeSession.status} />
+              </div>
 
-              {/* Playground body: contains Task submission and list of tasks in Phase 3 */}
-              <div className="dashboard-grid">
-                <div className="card task-runner-card">
-                  <h3>Agent Task Runner</h3>
-                  <p className="card-desc">Submit a coding prompt to let the agent compile diffs for this stack.</p>
-                  
-                  <form onSubmit={handleRunAgent} className="task-form" style={{ display: 'flex', gap: '8px' }}>
+              {/* Body */}
+              <div className="pg-body">
+                {/* Prompt bar */}
+                <div className="prompt-bar" id="agent-task-runner">
+                  <div className="prompt-bar-header">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="var(--accent)">
+                      <path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Z"/>
+                    </svg>
+                    <span className="prompt-bar-title">Agent Task Runner</span>
+                    <span className="prompt-bar-desc">Submit a prompt — agent generates real diffs</span>
+                  </div>
+                  <form className="prompt-row" onSubmit={handleRunAgent} id="form-run-agent">
                     <input
+                      id="input-task-prompt"
+                      className="prompt-input"
                       type="text"
-                      placeholder="Add a /health endpoint that connects to database..."
+                      placeholder="Add a /health endpoint that connects to the database…"
                       value={taskPrompt}
-                      onChange={(e) => setTaskPrompt(e.target.value)}
-                      className="form-input"
-                      style={{ flexGrow: 1 }}
+                      onChange={e => setTaskPrompt(e.target.value)}
                       disabled={runningTask}
                     />
-                    <button type="submit" className="btn-primary" disabled={runningTask || !taskPrompt.trim()}>
-                      {runningTask ? 'Running...' : 'Run Agent'}
+                    <button
+                      id="btn-run-agent"
+                      type="submit"
+                      className="btn-primary"
+                      disabled={runningTask || !taskPrompt.trim()}
+                    >
+                      {runningTask
+                        ? <>
+                            <span className="spinning" style={{ display: 'inline-flex', marginRight: 6 }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                                <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                              </svg>
+                            </span>
+                            Running
+                          </>
+                        : <>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6, verticalAlign: 'middle' }}>
+                              <line x1="5" y1="12" x2="19" y2="12"/>
+                              <polyline points="12 5 19 12 12 19"/>
+                            </svg>
+                            Run Agent
+                          </>}
                     </button>
                   </form>
                 </div>
 
-                <div className="card task-list-card" style={{ display: 'flex', flexDirection: 'column', maxHeight: '500px', overflowY: 'auto' }}>
-                  <h3>Task Execution Logs</h3>
-                  {!activeSession.agentTasks || activeSession.agentTasks.length === 0 ? (
-                    <div className="placeholder-container">
-                      <p>No tasks submitted yet.</p>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '12px' }}>
-                      {activeSession.agentTasks.map((task: any) => (
-                        <div key={task.id} style={{ border: '1px solid #1e293b', borderRadius: '6px', padding: '16px', backgroundColor: '#0b0f19', textAlign: 'left' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                            <span style={{ fontWeight: 600, fontSize: '14px', color: '#f8fafc' }}>Prompt: "{task.prompt}"</span>
-                            <span className={`badge badge-${task.status}`}>{task.status}</span>
-                          </div>
-                          <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '8px' }}>
-                            ID: <code>{task.id}</code> | Created: {new Date(task.createdAt).toLocaleTimeString()}
-                          </div>
-                          
-                          <RenderDiff codeDiffStr={task.codeDiff} infraDiffStr={task.infraDiff} />
-
-                          {task.status === 'completed' && (
-                            <div style={{ marginTop: '16px', borderTop: '1px solid #1e293b', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ fontSize: '12px', color: '#64748b' }}>Decision status:</span>
-                              {task.approved === true ? (
-                                <span style={{ color: '#10b981', fontSize: '13px', fontWeight: 600 }}>✓ Approved (Deployed)</span>
-                              ) : task.approved === false ? (
-                                <span style={{ color: '#ef4444', fontSize: '13px', fontWeight: 600 }}>✗ Rejected</span>
-                              ) : (
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                  <button onClick={() => handleApproveTask(task.id)} className="btn-primary" style={{ padding: '6px 12px', fontSize: '12px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}>
-                                    Approve & Deploy
-                                  </button>
-                                  <button onClick={() => handleRejectTask(task.id)} className="btn-primary" style={{ padding: '6px 12px', fontSize: '12px', background: '#374151' }}>
-                                    Reject
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                {/* Task log */}
+                <div>
+                  <div className="tasks-section-label">
+                    Task Execution Log
+                    <span className="tasks-count">{activeSession.agentTasks?.length ?? 0}</span>
+                  </div>
                 </div>
+
+                {!activeSession.agentTasks || activeSession.agentTasks.length === 0 ? (
+                  <div className="empty-tasks" id="empty-tasks-placeholder">
+                    <span style={{ display: 'inline-flex', marginBottom: 8 }}>
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--border-hover)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="11" width="18" height="10" rx="2"/>
+                        <circle cx="12" cy="5" r="2"/>
+                        <line x1="12" y1="7" x2="12" y2="11"/>
+                        <line x1="8" y1="15" x2="8" y2="17"/>
+                        <line x1="16" y1="15" x2="16" y2="17"/>
+                      </svg>
+                    </span>
+                    <p>No tasks yet — submit a prompt above to get started.</p>
+                  </div>
+                ) : (
+                  <div className="task-list" id="task-list">
+                    {[...activeSession.agentTasks].reverse().map((task: AgentTask) => (
+                      <div key={task.id} className="task-card" id={`task-card-${task.id}`}>
+                        {/* Header */}
+                        <div className="task-card-header">
+                          <span className="task-prompt-text">{task.prompt}</span>
+                          <div className="task-header-right">
+                            <span className="task-id">{task.id.slice(-8)}</span>
+                            <TaskBadge status={task.status} />
+                          </div>
+                        </div>
+
+                        {/* Diff output */}
+                        {(task.codeDiff || task.infraDiff) && (
+                          <DiffViewer codeDiffStr={task.codeDiff} infraDiffStr={task.infraDiff} />
+                        )}
+
+                        {/* Actions */}
+                        {task.status === 'completed' && (
+                          <div className="task-actions">
+                            <span className="task-actions-label">
+                              Created {new Date(task.createdAt).toLocaleTimeString()}
+                            </span>
+                            {task.approved === true ? (
+                              <span className="task-decision decision-approved">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 5, verticalAlign: 'middle' }}><polyline points="20 6 9 17 4 12"/></svg>
+                                Approved & Deployed
+                              </span>
+                            ) : task.approved === false ? (
+                              <span className="task-decision decision-rejected">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" style={{ marginRight: 5, verticalAlign: 'middle' }}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                Rejected
+                              </span>
+                            ) : (
+                              <div className="task-actions-buttons">
+                                <button
+                                  id={`btn-approve-${task.id}`}
+                                  className="btn-success"
+                                  onClick={() => handleApproveTask(task.id)}
+                                >
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 5, verticalAlign: 'middle' }}><polyline points="20 6 9 17 4 12"/></svg>
+                                  Approve & Deploy
+                                </button>
+                                <button
+                                  id={`btn-reject-${task.id}`}
+                                  className="btn-danger"
+                                  onClick={() => handleRejectTask(task.id)}
+                                >
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" style={{ marginRight: 5, verticalAlign: 'middle' }}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                  Reject
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ) : (
-            <div className="error-state">Failed to load playground details.</div>
-          )
-        ) : (
-          <div className="welcome-panel">
-            <div className="welcome-hero">
-              <h2>Zerops Agent Playground ⚡</h2>
-              <p>Welcome to the sandbox where you can test autonomous coding agents on live Zerops stacks.</p>
-              
-              <div className="guide-box">
-                <h4>To get started:</h4>
-                <ol>
-                  <li>Create a new playground session in the sidebar.</li>
-                  <li>Select the playground from the list.</li>
-                  <li>Prompt the coding agent to make code modifications or infrastructure updates.</li>
-                  <li>Review the diffs and approve deployment to Zerops!</li>
-                </ol>
-              </div>
-            </div>
-          </div>
-        )}
-      </main>
+            <div className="center-loader">Failed to load session details.</div>
+          )}
+        </main>
       </div>
-    </div>
+    </>
   );
 }
-
-export default App;
