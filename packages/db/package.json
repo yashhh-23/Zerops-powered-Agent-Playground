@@ -1,0 +1,17 @@
+{
+  "name": "@playground/db",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.ts",
+  "types": "index.d.ts",
+  "scripts": {
+    "generate": "prisma generate",
+    "migrate": "prisma migrate dev"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.18.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.18.0"
+  }
+}

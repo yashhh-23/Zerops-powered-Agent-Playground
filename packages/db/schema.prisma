@@ -1,0 +1,32 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model PlaygroundSession {
+  id              String   @id @default(cuid())
+  name            String
+  template        String   // e.g. "node-api-basic"
+  status          String   // "active" | "completed" | "failed"
+  zeropsProjectId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  agentTasks      AgentTask[]
+}
+
+model AgentTask {
+  id          String   @id @default(cuid())
+  sessionId   String
+  session     PlaygroundSession @relation(fields: [sessionId], references: [id])
+  prompt      String
+  status      String   // "pending" | "processing" | "completed" | "failed"
+  codeDiff    String?  // JSON string of code diffs
+  infraDiff   String?  // JSON string of infra diffs
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+  approved    Boolean?
+}
