@@ -156,7 +156,11 @@ export default function App() {
     return () => clearInterval(iv);
   }, [activeSessionId]);
 
-  const API = 'http://localhost:8080';
+  const API = import.meta.env.VITE_API_URL || (
+    window.location.hostname.includes('-3000')
+      ? window.location.origin.replace('-3000', '-8080')
+      : 'http://localhost:8080'
+  );
 
   const refreshHealth = () => {
     setLoadingHealth(true);
