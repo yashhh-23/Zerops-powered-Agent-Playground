@@ -1,0 +1,37 @@
+# Zerops Service Definitions
+# Managed services (db, nats) are provisioned through Zerops project import or dashboard:
+# - db: Managed PostgreSQL (OLTP)
+# - nats: NATS message queue
+
+zerops:
+  # Frontend service
+  - setup: web
+    build:
+      base: nodejs@20
+      buildCommands:
+        - npm install
+        - npm run build:web
+      deployFiles:
+        - apps/web/dist
+    run:
+      base: nodejs@20
+      # Serve built React app on port 3000
+      start: npm run preview --workspace=apps/web -- --port 3000 --host 0.0.0.0
+
+  # API service
+  - setup: api
+    build:
+      base: nodejs@20
+      buildCommands:
+        - npm install
+        - npm run build:api
+      deployFiles:
+        - apps/api/dist
+        - apps/api/package.json
+        - package.json
+        - package-lock.json
+        - node_modules
+    run:
+      base: nodejs@20
+      # Start Fastify server on port 8080
+      start: npm run start --workspace=apps/api
