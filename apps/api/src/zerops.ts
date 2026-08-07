@@ -3,10 +3,11 @@ import path from 'path';
 import os from 'os';
 import archiver from 'archiver';
 import dotenv from 'dotenv';
+import { prisma } from '@playground/db';
 
 dotenv.config();
 
-const API_BASE_URL = 'https://api.app-prg1.zerops.io/api/rest/public';
+const API_BASE_URL = process.env.ZEROPS_API_BASE || 'https://api.app-prg1.zerops.io/api/rest/public';
 
 /**
  * Creates a ZIP file containing the dummy application code and the updated zerops.yaml config
@@ -77,7 +78,6 @@ export async function createZeropsProject(sessionName: string): Promise<string> 
   console.log(`[Zerops] Creating project "${projectName}" on Zerops...`);
 
   try {
-    // TODO: verify endpoint and payload with Zerops docs
     const response = await fetch(`${API_BASE_URL}/project`, {
       method: 'POST',
       headers: {
@@ -127,7 +127,6 @@ export async function applyInfraDiff(projectId: string, infraDiff: { zeropsYaml:
     zipPath = await createDeploymentZip(infraDiff.zeropsYaml);
 
     // 2. Create app version and get storage URL
-    // TODO: verify endpoint and payload with Zerops docs
     console.log(`[Zerops] Creating app version for project: ${projectId}...`);
     const versionResponse = await fetch(`${API_BASE_URL}/project/${projectId}/app-version`, {
       method: 'POST',
@@ -146,7 +145,6 @@ export async function applyInfraDiff(projectId: string, infraDiff: { zeropsYaml:
     }
 
     const versionData: any = await versionResponse.json();
-    // Assume response contains uploadUrl and versionId
     const uploadUrl = versionData.uploadUrl || versionData.storageUrl;
     const versionId = versionData.id || versionData.versionId;
 
@@ -163,7 +161,7 @@ export async function applyInfraDiff(projectId: string, infraDiff: { zeropsYaml:
       headers: {
         'Content-Type': 'application/zip',
       },
-      body: fileStream as any, // Node streams work with global fetch
+      body: fileStream as any,
     });
 
     if (!uploadResponse.ok) {
@@ -174,7 +172,6 @@ export async function applyInfraDiff(projectId: string, infraDiff: { zeropsYaml:
     console.log(`[Zerops] ZIP upload complete. Triggering build/deploy pipeline...`);
 
     // 4. Trigger build / deploy pipeline
-    // TODO: verify endpoint and payload with Zerops docs
     const deployResponse = await fetch(`${API_BASE_URL}/app-version/${versionId}/deploy`, {
       method: 'POST',
       headers: {
@@ -193,7 +190,7 @@ export async function applyInfraDiff(projectId: string, infraDiff: { zeropsYaml:
     return true;
   } catch (error: any) {
     console.error('[Zerops] Deployment pipeline execution failed:', error.message);
-    return false;
+    throw error;
   } finally {
     // Cleanup temporary zip file
     if (zipPath && fs.existsSync(zipPath)) {
@@ -204,5 +201,110 @@ export async function applyInfraDiff(projectId: string, infraDiff: { zeropsYaml:
         console.error('[Zerops] Error cleaning up zip file:', err);
       }
     }
+  }
+}
+
+/**
+ * Gets or creates Zerops project using db transactions and exponential backoff
+ */
+export async function getOrCreateZeropsProject({
+  sessionId,
+  sessionName,
+}: {
+  sessionId: string;
+  sessionName: string;
+}): Promise<{ projectId: string; created: boolean }> {
+  const maxRetries = 3;
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const session = await tx.playgroundSession.findUnique({
+          where: { id: sessionId },
+        });
+
+        if (!session) {
+          throw new Error('Session not found');
+        }
+
+        if (session.zeropsProjectId) {
+          return { projectId: session.zeropsProjectId, created: false };
+        }
+
+        const projectId = await createZeropsProject(sessionName);
+        
+        try {
+          await tx.playgroundSession.update({
+            where: { id: sessionId },
+            data: { zeropsProjectId: projectId },
+          });
+        } catch (updateError: any) {
+          if (updateError.code === 'P2002') {
+            const updatedSession = await tx.playgroundSession.findUnique({
+              where: { id: sessionId },
+            });
+            if (!updatedSession?.zeropsProjectId) {
+              throw updateError;
+            }
+            return { projectId: updatedSession.zeropsProjectId, created: false };
+          }
+          throw updateError;
+        }
+
+        return { projectId, created: true };
+      });
+
+      return result;
+    } catch (error: any) {
+      lastError = error;
+      if (error.code !== 'P2002' && !error.message?.includes('Unique constraint')) {
+        throw error;
+      }
+      await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, attempt)));
+    }
+  }
+
+  throw lastError || new Error('Failed to create/get Zerops project');
+}
+
+/**
+ * Orchestrates deploying code and infra diffs to Zerops
+ */
+export async function deployToZerops(sessionId: string, task: any): Promise<boolean> {
+  console.log(`[Zerops Integration] Triggering Zerops Deployment pipeline for session ${sessionId}, task ${task.id}`);
+
+  const session = await prisma.playgroundSession.findUnique({
+    where: { id: sessionId },
+  });
+
+  if (!session) {
+    throw new Error(`Session not found for ID: ${sessionId}`);
+  }
+
+  const { projectId } = await getOrCreateZeropsProject({
+    sessionId,
+    sessionName: session.name,
+  });
+
+  if (task.infraDiff) {
+    try {
+      const infraDiff = JSON.parse(task.infraDiff);
+      console.log(`[Zerops Integration] Applying infra diff for project: ${projectId}`);
+      const success = await applyInfraDiff(projectId, infraDiff);
+      if (success) {
+        console.log(`[Zerops Integration] Deployment pipeline successfully executed for task ${task.id}`);
+        return true;
+      } else {
+        console.error(`[Zerops Integration] Deployment pipeline execution failed for task ${task.id}`);
+        return false;
+      }
+    } catch (err: any) {
+      console.error(`[Zerops Integration] Failed to parse/apply infra diff for task ${task.id}:`, err.message);
+      throw err;
+    }
+  } else {
+    console.warn(`[Zerops Integration] No infraDiff payload found for task ${task.id}. Skipping deployment step.`);
+    return true;
   }
 }

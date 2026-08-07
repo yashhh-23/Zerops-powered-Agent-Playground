@@ -1,9 +1,10 @@
-import Fastify from 'fastify';
+import Fastify, { FastifyRequest, FastifyReply } from 'fastify';
 import cors from '@fastify/cors';
+import fastifyRateLimit from '@fastify/rate-limit';
 import dotenv from 'dotenv';
 import path from 'path';
 
-// Load environment variables from local and root directory paths
+// Load environment variables
 dotenv.config();
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
@@ -12,264 +13,444 @@ dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
 import { prisma } from '@playground/db';
 import { taskQueue } from './queue';
 import { handleAgentTask } from './worker';
-import { createZeropsProject, applyInfraDiff } from './zerops';
-
+import { deployToZerops } from './zerops';
+import { registerAuth } from './auth';
+import { AppError } from './errors';
+import { registerErrorHandler } from './error-handler';
+import {
+  CreateSessionSchema,
+  SessionParamsSchema,
+  SessionTasksParamsSchema,
+  CreateTaskSchema,
+  TaskParamsSchema,
+} from './schemas';
 
 const fastify = Fastify({
   logger: true,
+  ajv: {
+    customOptions: {
+      removeAdditional: true, // Remove unknown properties
+      coerceTypes: false,     // Strict validation
+    },
+  },
 });
 
-// Register CORS
+// Configure CORS
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 fastify.register(cors, {
-  origin: '*',
+  origin: [FRONTEND_URL, 'http://localhost:3000'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
+});
+
+// Register Rate Limiting
+fastify.register(fastifyRateLimit, {
+  global: false, // Apply per route
+  max: 100,
+  timeWindow: '1 minute',
+  allowList: ['127.0.0.1', 'localhost'],
+  keyGenerator: (request) => {
+    const apiKey = request.headers['x-api-key'] as string;
+    return apiKey || request.ip;
+  },
+  errorResponseBuilder: (request, context: any) => {
+    return {
+      error: 'RATE_LIMIT_EXCEEDED',
+      message: `Too many requests. Try again in ${Math.ceil(context.ttl / 1000)} seconds`,
+      limit: context.max,
+      reset: context.ttl,
+    };
+  },
+  addHeaders: {
+    'x-ratelimit-limit': true,
+    'x-ratelimit-remaining': true,
+    'x-ratelimit-reset': true,
+  },
+});
+
+// Register Auth Middleware
+registerAuth(fastify);
+
+// Centralized Error Handler
+registerErrorHandler(fastify);
+
+// Fastify lifecycle hooks for Queue
+fastify.addHook('onReady', async () => {
+  await taskQueue.init();
+  taskQueue.registerHandler(handleAgentTask);
+  taskQueue.startProcessing();
+});
+
+fastify.addHook('onClose', async () => {
+  await taskQueue.close();
 });
 
 // Basic Health Check (Phase 0)
-fastify.get('/health', async (request, reply) => {
+fastify.get('/health', async () => {
   return { status: 'ok', service: 'api' };
 });
 
 // Database Health Check (Phase 1)
-fastify.get('/api/health/db', async (request, reply) => {
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-    return { status: 'ok', db: 'connected' };
-  } catch (error: any) {
-    return reply.status(500).send({
-      status: 'error',
-      db: 'disconnected',
-      message: error?.message || 'Database connection error',
-    });
-  }
+fastify.get('/api/health/db', async () => {
+  await prisma.$queryRaw`SELECT 1`;
+  return { status: 'ok', db: 'connected' };
 });
 
 // Create a new playground session
-fastify.post('/api/sessions', async (request, reply) => {
+fastify.post('/api/sessions', {
+  config: {
+    rateLimit: {
+      max: 10,
+      timeWindow: '1 minute',
+    },
+  },
+  schema: {
+    body: CreateSessionSchema,
+  },
+}, async (request, reply) => {
   const { name, template } = request.body as { name: string; template: string };
-  if (!name || !template) {
-    return reply.status(400).send({ error: 'Missing name or template' });
-  }
-  try {
-    const session = await prisma.playgroundSession.create({
-      data: {
-        name,
-        template,
-        status: 'active',
-      },
-    });
-    return session;
-  } catch (error: any) {
-    fastify.log.error(error);
-    return reply.status(500).send({ error: 'Failed to create session', message: error.message });
-  }
+  const session = await prisma.playgroundSession.create({
+    data: {
+      name,
+      template,
+      status: 'active',
+    },
+  });
+  return session;
 });
 
-// List all playground sessions
-fastify.get('/api/sessions', async (request, reply) => {
-  try {
-    const sessions = await prisma.playgroundSession.findMany({
-      select: {
-        id: true,
-        name: true,
-        template: true,
-        status: true,
-        createdAt: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
-    return sessions;
-  } catch (error: any) {
-    fastify.log.error(error);
-    return reply.status(500).send({ error: 'Failed to list sessions', message: error.message });
-  }
+// List all playground sessions associated with the X-API-Key
+fastify.get('/api/sessions', {
+  config: {
+    rateLimit: {
+      max: 30,
+      timeWindow: '1 minute',
+    },
+  },
+}, async (request: FastifyRequest, reply: FastifyReply) => {
+  const apiKey = request.headers['x-api-key'] as string;
+  const sessions = await prisma.playgroundSession.findMany({
+    where: { apiKey },
+    select: {
+      id: true,
+      name: true,
+      template: true,
+      status: true,
+      createdAt: true,
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+  });
+  return sessions;
 });
 
-// Get session details by ID
-fastify.get('/api/sessions/:id', async (request, reply) => {
+// Get session details by ID (Scoped by API Key)
+fastify.get('/api/sessions/:id', {
+  config: {
+    rateLimit: {
+      max: 30,
+      timeWindow: '1 minute',
+    },
+  },
+  schema: {
+    params: SessionParamsSchema,
+  },
+}, async (request: FastifyRequest, reply: FastifyReply) => {
   const { id } = request.params as { id: string };
-  try {
-    const session = await prisma.playgroundSession.findUnique({
-      where: { id },
-      include: {
-        agentTasks: {
-          orderBy: {
-            createdAt: 'asc',
-          },
+  const apiKey = request.headers['x-api-key'] as string;
+
+  const session = await prisma.playgroundSession.findFirst({
+    where: { id, apiKey },
+    include: {
+      agentTasks: {
+        orderBy: {
+          createdAt: 'asc',
         },
       },
-    });
-    if (!session) {
-      return reply.status(404).send({ error: 'Session not found' });
-    }
-    return session;
-  } catch (error: any) {
-    fastify.log.error(error);
-    return reply.status(500).send({ error: 'Failed to fetch session details', message: error.message });
+    },
+  });
+
+  if (!session) {
+    throw new AppError('Session not found', 404);
   }
+  return session;
 });
 
-// Create a new task in a playground session
-fastify.post('/api/sessions/:sessionId/tasks', async (request, reply) => {
+// SSE events endpoint (Scoped by API Key in header/query)
+fastify.get('/api/sessions/:id/events', {
+  schema: {
+    params: SessionParamsSchema,
+    query: {
+      type: 'object',
+      properties: {
+        apiKey: { type: 'string' },
+      },
+    },
+  },
+}, async (request: FastifyRequest, reply: FastifyReply) => {
+  const { id: sessionId } = request.params as { id: string };
+  const apiKey = (request.headers['x-api-key'] || (request.query as any)?.apiKey) as string;
+
+  const session = await prisma.playgroundSession.findFirst({
+    where: { id: sessionId, apiKey },
+  });
+
+  if (!session) {
+    throw new AppError('Session not found', 404);
+  }
+
+  // Set SSE headers
+  reply.raw.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no', // Disable buffering on Nginx/Zerops
+  });
+
+  // Write initial connection success
+  reply.raw.write('event: open\ndata: connected\n\n');
+
+  // Keep-alive heartbeat interval to avoid timeout (e.g. 15s)
+  const heartbeat = setInterval(() => {
+    reply.raw.write(': heartbeat\n\n');
+  }, 15000);
+
+  let lastTimestamp = new Date();
+  let lastSessionUpdatedAt = session.updatedAt;
+  let isPolling = false;
+
+  const pollInterval = setInterval(async () => {
+    if (isPolling) return;
+    isPolling = true;
+    try {
+      if (reply.raw.destroyed) {
+        clearInterval(pollInterval);
+        clearInterval(heartbeat);
+        return;
+      }
+
+      // 1. Fetch session updates
+      const currentSession = await prisma.playgroundSession.findUnique({
+        where: { id: sessionId },
+      });
+      if (currentSession && currentSession.updatedAt > lastSessionUpdatedAt) {
+        reply.raw.write(`event: session-update\ndata: ${JSON.stringify(currentSession)}\n\n`);
+        lastSessionUpdatedAt = currentSession.updatedAt;
+      }
+
+      // 2. Fetch task updates
+      const tasks = await prisma.agentTask.findMany({
+        where: {
+          sessionId,
+          updatedAt: { gt: lastTimestamp },
+        },
+        orderBy: { updatedAt: 'asc' },
+      });
+
+      for (const task of tasks) {
+        reply.raw.write(`event: task-update\ndata: ${JSON.stringify(task)}\n\n`);
+        lastTimestamp = new Date(Math.max(lastTimestamp.getTime(), task.updatedAt.getTime()));
+      }
+    } catch (error) {
+      console.error('[SSE] Error polling session/task updates:', error);
+    } finally {
+      isPolling = false;
+    }
+  }, 1000);
+
+  request.raw.on('close', () => {
+    clearInterval(pollInterval);
+    clearInterval(heartbeat);
+    console.log(`[SSE] Connection closed for session ${sessionId}`);
+  });
+
+  // Fastify handles the reply internally when reply.raw is written to directly
+  reply.sent = true;
+});
+
+// Create a new task in a playground session (Scoped by API Key)
+fastify.post('/api/sessions/:sessionId/tasks', {
+  config: {
+    rateLimit: {
+      max: 5, // 5 tasks per minute per API key
+      timeWindow: '1 minute',
+    },
+  },
+  schema: {
+    params: SessionTasksParamsSchema,
+    body: CreateTaskSchema,
+  },
+}, async (request: FastifyRequest, reply: FastifyReply) => {
   const { sessionId } = request.params as { sessionId: string };
   const { prompt } = request.body as { prompt: string };
-  if (!prompt) {
-    return reply.status(400).send({ error: 'Missing prompt' });
+  const apiKey = request.headers['x-api-key'] as string;
+
+  const session = await prisma.playgroundSession.findFirst({
+    where: { id: sessionId, apiKey },
+  });
+
+  if (!session) {
+    throw new AppError('Session not found', 404);
   }
-  try {
-    const session = await prisma.playgroundSession.findUnique({
-      where: { id: sessionId },
-    });
-    if (!session) {
-      return reply.status(404).send({ error: 'Session not found' });
-    }
 
-    const task = await prisma.agentTask.create({
-      data: {
-        sessionId,
-        prompt,
-        status: 'pending',
-      },
-    });
-
-    await taskQueue.publish({
+  const task = await prisma.agentTask.create({
+    data: {
       sessionId,
-      taskId: task.id,
       prompt,
-    });
+      status: 'pending',
+    },
+  });
 
-    return task;
-  } catch (error: any) {
-    fastify.log.error(error);
-    return reply.status(500).send({ error: 'Failed to create task', message: error.message });
-  }
+  await taskQueue.publish({
+    sessionId,
+    taskId: task.id,
+    prompt,
+  });
+
+  return task;
 });
 
-// List tasks for a specific session
-fastify.get('/api/sessions/:sessionId/tasks', async (request, reply) => {
+// List tasks for a specific session (Scoped by API Key)
+fastify.get('/api/sessions/:sessionId/tasks', {
+  schema: {
+    params: SessionTasksParamsSchema,
+  },
+}, async (request: FastifyRequest, reply: FastifyReply) => {
   const { sessionId } = request.params as { sessionId: string };
-  try {
-    const tasks = await prisma.agentTask.findMany({
-      where: { sessionId },
-      orderBy: { createdAt: 'asc' },
-    });
-    return tasks;
-  } catch (error: any) {
-    fastify.log.error(error);
-    return reply.status(500).send({ error: 'Failed to list tasks', message: error.message });
+  const apiKey = request.headers['x-api-key'] as string;
+
+  const session = await prisma.playgroundSession.findFirst({
+    where: { id: sessionId, apiKey },
+  });
+
+  if (!session) {
+    throw new AppError('Session not found', 404);
   }
+
+  const tasks = await prisma.agentTask.findMany({
+    where: { sessionId },
+    orderBy: { createdAt: 'asc' },
+  });
+  return tasks;
 });
 
-// Get detailed information of a single task
-fastify.get('/api/tasks/:id', async (request, reply) => {
+// Get detailed information of a single task (Scoped by API Key)
+fastify.get('/api/tasks/:id', {
+  schema: {
+    params: TaskParamsSchema,
+  },
+}, async (request: FastifyRequest, reply: FastifyReply) => {
   const { id } = request.params as { id: string };
-  try {
-    const task = await prisma.agentTask.findUnique({
-      where: { id },
-    });
-    if (!task) {
-      return reply.status(404).send({ error: 'Task not found' });
-    }
-    return task;
-  } catch (error: any) {
-    fastify.log.error(error);
-    return reply.status(500).send({ error: 'Failed to fetch task details', message: error.message });
+  const apiKey = request.headers['x-api-key'] as string;
+
+  const task = await prisma.agentTask.findFirst({
+    where: {
+      id,
+      session: { apiKey },
+    },
+  });
+
+  if (!task) {
+    throw new AppError('Task not found', 404);
   }
+  return task;
 });
 
-// Real function for Zerops deployment orchestration
-async function deployToZerops(sessionId: string, task: any) {
-  console.log(`[Zerops Integration] Triggering Zerops Deployment pipeline for session ${sessionId}, task ${task.id}`);
-  
-  try {
-    const session = await prisma.playgroundSession.findUnique({
-      where: { id: sessionId },
-    });
+// Approve a task (Awaits deployment trigger)
+fastify.post('/api/tasks/:id/approve', {
+  config: {
+    rateLimit: {
+      max: 10,
+      timeWindow: '1 minute',
+    },
+  },
+  schema: {
+    params: TaskParamsSchema,
+  },
+}, async (request: FastifyRequest, reply: FastifyReply) => {
+  const { id } = request.params as { id: string };
+  const apiKey = request.headers['x-api-key'] as string;
 
-    if (!session) {
-      console.error(`[Zerops Integration] Session not found for ID: ${sessionId}`);
-      return;
-    }
+  const task = await prisma.agentTask.findFirst({
+    where: {
+      id,
+      session: { apiKey },
+    },
+  });
 
-    let projectId = session.zeropsProjectId;
+  if (!task) {
+    throw new AppError('Task not found', 404);
+  }
 
-    if (!projectId) {
-      console.log(`[Zerops Integration] No existing Zerops project found for session. Creating a new one...`);
-      projectId = await createZeropsProject(session.name);
-      
-      await prisma.playgroundSession.update({
-        where: { id: sessionId },
-        data: { zeropsProjectId: projectId },
+  const updatedTask = await prisma.agentTask.update({
+    where: { id },
+    data: { 
+      approved: true,
+      deployStatus: 'deploying'
+    },
+  });
+
+  // Await deployment and persist result
+  deployToZerops(task.sessionId, updatedTask)
+    .then(async (success) => {
+      await prisma.agentTask.update({
+        where: { id },
+        data: { deployStatus: success ? 'deployed' : 'failed', deployError: success ? null : 'Deployment process failed' },
       });
-      console.log(`[Zerops Integration] Session updated with Zerops Project ID: ${projectId}`);
-    } else {
-      console.log(`[Zerops Integration] Found existing Zerops project ID: ${projectId}`);
-    }
-
-    if (task.infraDiff) {
-      const infraDiff = JSON.parse(task.infraDiff);
-      console.log(`[Zerops Integration] Applying infra diff for project: ${projectId}`);
-      const success = await applyInfraDiff(projectId, infraDiff);
-      if (success) {
-        console.log(`[Zerops Integration] Deployment pipeline successfully executed for task ${task.id}`);
-      } else {
-        console.error(`[Zerops Integration] Deployment pipeline execution failed for task ${task.id}`);
-      }
-    } else {
-      console.warn(`[Zerops Integration] No infraDiff payload found for task ${task.id}. Skipping deployment step.`);
-    }
-  } catch (error: any) {
-    console.error(`[Zerops Integration] Fatal error in deployToZerops:`, error.message);
-  }
-}
-
-// Approve a task
-fastify.post('/api/tasks/:id/approve', async (request, reply) => {
-  const { id } = request.params as { id: string };
-  try {
-    const task = await prisma.agentTask.findUnique({
-      where: { id },
-    });
-    if (!task) {
-      return reply.status(404).send({ error: 'Task not found' });
-    }
-
-    const updatedTask = await prisma.agentTask.update({
-      where: { id },
-      data: { approved: true },
+      // Force trigger session updatedAt to update SSE listeners
+      await prisma.playgroundSession.update({
+        where: { id: task.sessionId },
+        data: { updatedAt: new Date() },
+      });
+      console.log(`[Zerops] Deployment complete for task ${id}, success: ${success}`);
+    })
+    .catch(async (err: any) => {
+      console.error(`[Zerops] Deployment failed for task ${id}:`, err);
+      await prisma.agentTask.update({
+        where: { id },
+        data: { deployStatus: 'failed', deployError: err.message },
+      });
+      await prisma.playgroundSession.update({
+        where: { id: task.sessionId },
+        data: { updatedAt: new Date() },
+      });
     });
 
-    deployToZerops(task.sessionId, updatedTask);
-
-    return { status: 'approved', message: 'Would apply diffs and deploy to Zerops' };
-  } catch (error: any) {
-    fastify.log.error(error);
-    return reply.status(500).send({ error: 'Failed to approve task', message: error.message });
-  }
+  return { status: 'approved', message: 'Applied diffs and triggered Zerops deployment' };
 });
 
-// Reject a task
-fastify.post('/api/tasks/:id/reject', async (request, reply) => {
+// Reject a task (Scoped by API Key)
+fastify.post('/api/tasks/:id/reject', {
+  schema: {
+    params: TaskParamsSchema,
+  },
+}, async (request: FastifyRequest, reply: FastifyReply) => {
   const { id } = request.params as { id: string };
-  try {
-    const task = await prisma.agentTask.findUnique({
-      where: { id },
-    });
-    if (!task) {
-      return reply.status(404).send({ error: 'Task not found' });
-    }
+  const apiKey = request.headers['x-api-key'] as string;
 
-    await prisma.agentTask.update({
-      where: { id },
-      data: { approved: false },
-    });
+  const task = await prisma.agentTask.findFirst({
+    where: {
+      id,
+      session: { apiKey },
+    },
+  });
 
-    return { status: 'rejected' };
-  } catch (error: any) {
-    fastify.log.error(error);
-    return reply.status(500).send({ error: 'Failed to reject task', message: error.message });
+  if (!task) {
+    throw new AppError('Task not found', 404);
   }
+
+  await prisma.agentTask.update({
+    where: { id },
+    data: { approved: false },
+  });
+
+  await prisma.playgroundSession.update({
+    where: { id: task.sessionId },
+    data: { updatedAt: new Date() },
+  });
+
+  return { status: 'rejected' };
 });
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 8080;
@@ -277,10 +458,6 @@ const HOST = '0.0.0.0';
 
 const start = async () => {
   try {
-    // Initialize task queue and worker
-    await taskQueue.init(process.env.NATS_URL);
-    taskQueue.registerHandler(handleAgentTask);
-
     await fastify.listen({ port: PORT, host: HOST });
     console.log(`Server listening on http://localhost:${PORT}`);
   } catch (err) {
