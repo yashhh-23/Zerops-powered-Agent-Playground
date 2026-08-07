@@ -1,4 +1,4 @@
-import { connect, NatsConnection, JSONCodec } from 'nats';
+import { prisma } from '@playground/db';
 
 export interface TaskPayload {
   sessionId: string;
@@ -8,83 +8,142 @@ export interface TaskPayload {
 
 type TaskHandler = (payload: TaskPayload) => Promise<void>;
 
-class TaskQueue {
-  private natsConn: NatsConnection | null = null;
-  private jc = JSONCodec<TaskPayload>();
-  private inMemoryQueue: TaskPayload[] = [];
+export class TaskQueue {
   private handlers: TaskHandler[] = [];
-  private intervalId: NodeJS.Timeout | null = null;
+  private isProcessing = false;
+  private pollInterval: NodeJS.Timeout | null = null;
+  private isPolling = false;
 
-  async init(natsUrl?: string) {
-    if (natsUrl) {
-      try {
-        console.log(`Connecting to NATS at ${natsUrl}...`);
-        this.natsConn = await connect({ servers: natsUrl, timeout: 2000 });
-        console.log('NATS connection established!');
-        
-        // Subscribe to topic
-        const sub = this.natsConn.subscribe('agent.tasks');
-        (async () => {
-          for await (const m of sub) {
-            try {
-              const payload = this.jc.decode(m.data);
-              console.log(`Received task via NATS:`, payload);
-              await this.triggerHandlers(payload);
-            } catch (err) {
-              console.error('Error processing NATS message:', err);
-            }
-          }
-        })();
-        return;
-      } catch (err) {
-        console.warn(`Failed to connect to NATS (${err}). Falling back to in-memory queue.`);
-        this.natsConn = null;
-      }
-    } else {
-      console.log('No NATS_URL provided. Using in-memory queue.');
-    }
-
-    // Setup in-memory polling worker
-    this.intervalId = setInterval(async () => {
-      if (this.inMemoryQueue.length > 0) {
-        const payload = this.inMemoryQueue.shift();
-        if (payload) {
-          console.log(`Processing task via in-memory queue:`, payload);
-          await this.triggerHandlers(payload);
-        }
-      }
-    }, 1000);
+  async init() {
+    console.log('Using database queue (PostgreSQL).');
   }
 
   registerHandler(handler: TaskHandler) {
     this.handlers.push(handler);
   }
 
-  private async triggerHandlers(payload: TaskPayload) {
-    for (const handler of this.handlers) {
-      try {
-        await handler(payload);
-      } catch (err) {
-        console.error('Error in task handler:', err);
-      }
+  async publish(payload: TaskPayload): Promise<string> {
+    const queueJob = await prisma.queueJob.create({
+      data: {
+        type: 'generate',
+        payload: payload as any,
+      },
+    });
+    console.log(`Enqueued task in database: ${queueJob.id}`, payload);
+    return queueJob.id;
+  }
+
+  async claimJob(): Promise<{ id: string; type: string; payload: any; attempts: number } | null> {
+    try {
+      // Use raw query with FOR UPDATE SKIP LOCKED
+      const jobs = await prisma.$queryRaw<Array<{ id: string; type: string; payload: any; attempts: number }>>`
+        WITH next_job AS (
+          SELECT id
+          FROM "QueueJob"
+          WHERE status = 'pending'
+            AND "scheduledAt" <= NOW()
+          ORDER BY "createdAt" ASC
+          LIMIT 1
+          FOR UPDATE SKIP LOCKED
+        )
+        UPDATE "QueueJob"
+        SET status = 'processing',
+            attempts = attempts + 1
+        FROM next_job
+        WHERE "QueueJob".id = next_job.id
+        RETURNING "QueueJob".id, "QueueJob".type, "QueueJob".payload, "QueueJob".attempts
+      `;
+
+      return jobs[0] || null;
+    } catch (error) {
+      console.error('Error claiming job from Postgres queue:', error);
+      return null;
     }
   }
 
-  async publish(payload: TaskPayload) {
-    if (this.natsConn) {
-      this.natsConn.publish('agent.tasks', this.jc.encode(payload));
-      console.log(`Published task to NATS topic 'agent.tasks':`, payload);
-    } else {
-      this.inMemoryQueue.push(payload);
-      console.log(`Enqueued task in-memory:`, payload);
+  async completeJob(jobId: string): Promise<void> {
+    await prisma.queueJob.update({
+      where: { id: jobId },
+      data: { status: 'completed' },
+    });
+  }
+
+  async failJob(jobId: string, error: string): Promise<void> {
+    try {
+      const job = await prisma.queueJob.findUnique({
+        where: { id: jobId },
+      });
+
+      if (!job) return;
+
+      const shouldRetry = job.attempts < job.maxAttempts;
+
+      await prisma.queueJob.update({
+        where: { id: jobId },
+        data: {
+          status: shouldRetry ? 'pending' : 'failed',
+          error,
+          scheduledAt: shouldRetry 
+            ? new Date(Date.now() + 5000 * job.attempts) // Exponential backoff (5s, 10s...)
+            : undefined,
+        },
+      });
+    } catch (err) {
+      console.error(`Failed to record failure for job ${jobId}:`, err);
+    }
+  }
+
+  startProcessing(): void {
+    if (this.pollInterval) {
+      console.warn('Queue already processing');
+      return;
+    }
+
+    this.isProcessing = true;
+
+    const process = async () => {
+      if (!this.isProcessing || this.isPolling) return;
+      this.isPolling = true;
+
+      try {
+        const job = await this.claimJob();
+        if (!job) return;
+
+        console.log(`Processing job ${job.id} (type: ${job.type})`);
+        const payload = job.payload as unknown as TaskPayload;
+
+        try {
+          // Process job
+          for (const handler of this.handlers) {
+            await handler(payload);
+          }
+          await this.completeJob(job.id);
+          console.log(`Job ${job.id} completed successfully`);
+        } catch (error: any) {
+          console.error(`Job ${job.id} failed:`, error.message);
+          await this.failJob(job.id, error.message);
+        }
+      } catch (error) {
+        console.error('Queue processing error:', error);
+      } finally {
+        this.isPolling = false;
+      }
+    };
+
+    // Poll every 2 seconds
+    this.pollInterval = setInterval(process, 2000);
+  }
+
+  stopProcessing(): void {
+    this.isProcessing = false;
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+      this.pollInterval = null;
     }
   }
 
   async close() {
-    if (this.intervalId) clearInterval(this.intervalId);
-    if (this.natsConn) {
-      await this.natsConn.drain();
-    }
+    this.stopProcessing();
   }
 }
 

@@ -14,6 +14,7 @@ export interface AgentTask {
   sessionId: string;
   prompt: string;
   status: string; // 'pending' | 'processing' | 'completed' | 'failed'
+  deployStatus?: 'pending' | 'deploying' | 'deployed' | 'failed' | null;
   codeDiff: string | null;
   infraDiff: string | null;
   createdAt: string;

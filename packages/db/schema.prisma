@@ -5,15 +5,16 @@ datasource db {
 
 generator client {
   provider      = "prisma-client-js"
-  binaryTargets = ["native", "debian-openssl-1.1.x", "debian-openssl-3.0.x", "linux-musl", "linux-musl-openssl-3.0.x"]
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 model PlaygroundSession {
   id              String   @id @default(cuid())
   name            String
+  apiKey          String?  @unique @default(cuid())
   template        String   // e.g. "node-api-basic"
   status          String   // "active" | "completed" | "failed"
-  zeropsProjectId String?
+  zeropsProjectId String?  @unique
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   agentTasks      AgentTask[]
@@ -25,9 +26,28 @@ model AgentTask {
   session     PlaygroundSession @relation(fields: [sessionId], references: [id])
   prompt      String
   status      String   // "pending" | "processing" | "completed" | "failed"
+  deployStatus String?  // "pending" | "deploying" | "deployed" | "failed"
+  deployError String?
   codeDiff    String?  // JSON string of code diffs
   infraDiff   String?  // JSON string of infra diffs
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt @default(now())
   completedAt DateTime?
   approved    Boolean?
+}
+
+model QueueJob {
+  id          String   @id @default(cuid())
+  type        String
+  status      String   @default("pending") // pending, processing, completed, failed
+  payload     Json
+  attempts    Int      @default(0)
+  maxAttempts Int      @default(3)
+  error       String?
+  scheduledAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([status, scheduledAt])
+  @@index([status, createdAt])
 }
