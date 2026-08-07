@@ -12,6 +12,7 @@
     "build:api": "npm run build --workspace=apps/api",
     "build:web": "npm run build --workspace=apps/web",
     "db:generate": "npm run generate --workspace=packages/db",
-    "db:migrate": "npm run migrate --workspace=packages/db"
+    "db:migrate": "npm run migrate --workspace=packages/db",
+    "postinstall": "npm run db:generate"
   }
 }
