@@ -1,0 +1,27 @@
+{
+  "name": "@playground/api",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "rimraf dist && tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "@playground/db": "*",
+    "@playground/types": "*",
+    "archiver": "^6.0.2",
+    "dotenv": "^16.4.5",
+    "fastify": "^4.28.1",
+    "nats": "^2.26.0"
+  },
+  "devDependencies": {
+    "@types/archiver": "^6.0.2",
+    "@types/node": "^20.14.9",
+    "rimraf": "^5.0.7",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.2"
+  }
+}
