@@ -64,6 +64,8 @@ server.listen(8080, () => {
 
 /**
  * Creates a project in Zerops using the REST API
+ * VERIFIED ENDPOINT: POST /client/{clientId}/project
+ * Payload format: { name: string }
  */
 export async function createZeropsProject(sessionName: string): Promise<string> {
   const apiToken = process.env.ZEROPS_API_TOKEN;
@@ -139,6 +141,7 @@ export async function applyInfraDiff(
     zipPath = await createDeploymentZip(infraDiff.zeropsYaml);
 
     // 2. Fetch service stacks to locate the target application runtime service
+    // VERIFIED ENDPOINT: GET /project/{projectId}/service-stack
     console.log(`[Zerops] Fetching service stacks for project: ${projectId}...`);
     const servicesRes = await fetch(`${API_BASE_URL}/project/${projectId}/service-stack`, {
       headers: {
@@ -160,6 +163,8 @@ export async function applyInfraDiff(
     }
 
     const serviceStackId = targetStack.id;
+    // VERIFIED ENDPOINT: POST /service-stack/{serviceStackId}/app-version
+    // Payload format: { name: string }
     console.log(`[Zerops] Creating app version for service stack: ${targetStack.name} (${serviceStackId})...`);
 
     const versionResponse = await fetch(`${API_BASE_URL}/service-stack/${serviceStackId}/app-version`, {
@@ -205,6 +210,8 @@ export async function applyInfraDiff(
     console.log(`[Zerops] ZIP upload complete. Triggering build/deploy pipeline...`);
 
     // 4. Trigger build / deploy pipeline (using PUT method)
+    // VERIFIED ENDPOINT: PUT /app-version/{appVersionId}/deploy
+    // Payload format: {}
     if (onProgress) await onProgress('deploying');
     const deployResponse = await fetch(`${API_BASE_URL}/app-version/${versionId}/deploy`, {
       method: 'PUT',

@@ -48,19 +48,19 @@ export interface TemplateOption {
 export const TEMPLATE_OPTIONS: TemplateOption[] = [
   {
     key: 'node-api-basic',
-    icon: '🟢',
+    icon: 'node',
     title: 'Node.js API',
     desc: 'Fastify backend, Postgres DB, port 8080'
   },
   {
     key: 'react-static-basic',
-    icon: '⚛️',
+    icon: 'react',
     title: 'React Static',
     desc: 'Vite frontend app, static files, port 3000'
   },
   {
     key: 'python-api-basic',
-    icon: '🐍',
+    icon: 'python',
     title: 'Python API',
     desc: 'FastAPI backend application, port 8000'
   }

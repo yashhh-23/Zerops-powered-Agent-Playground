@@ -3,7 +3,7 @@ import { useSessions } from './hooks/useSessions';
 import { useSessionSSE } from './hooks/useSessionSSE';
 import { SessionSidebar } from './components/SessionSidebar';
 import { PlaygroundPanel } from './components/PlaygroundPanel';
-import { SpinnerIcon } from './components/Icons';
+import { SpinnerIcon, AlertIcon } from './components/Icons';
 import './App.css';
 
 export default function App() {
@@ -36,6 +36,7 @@ export default function App() {
   } = useSessions();
 
   const [newTemplate, setNewTemplate] = useState('node-api-basic');
+  const [previewTab, setPreviewTab] = useState<'health.ts' | 'zerops.yaml'>('health.ts');
 
   const { isConnected, connectionError, dbHealth: sseDbHealth } = useSessionSSE({
     sessionId: activeSessionId,
@@ -52,7 +53,9 @@ export default function App() {
       {/* Full-width error banner outside layout */}
       {error && (
         <div className="error-banner" id="error-banner" role="alert">
-          <span>⚠ {error}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <AlertIcon size={12} /> {error}
+          </span>
           <button onClick={() => setError(null)} aria-label="Dismiss error" style={{ display: 'inline-flex', alignItems: 'center' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" role="img" aria-label="Close icon">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -85,21 +88,6 @@ export default function App() {
             /* Welcome screen */
             <div className="welcome">
               <div className="welcome-inner">
-                <div className="mini-diff-preview font-mono">
-                  <div className="mini-diff-line diff-line-ctx">
-                    <span className="diff-sign"> </span>
-                    <span>const config = {JSON.stringify({ port: 8080 })};</span>
-                  </div>
-                  <div className="mini-diff-line diff-line-del">
-                    <span className="diff-sign">-</span>
-                    <span>app.listen(config.port);</span>
-                  </div>
-                  <div className="mini-diff-line diff-line-add">
-                    <span className="diff-sign">+</span>
-                    <span>await app.listen({'{'} ...config, host: '0.0.0.0' {'}'});</span>
-                  </div>
-                </div>
-
                 <div className="welcome-brand">
                   <span className="welcome-eyebrow">Zerops Agent Playground</span>
                   <h1 className="welcome-title">Spin up your first agent</h1>
@@ -174,61 +162,84 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Second column: Live Preview Panel */}
+              {/* Second column: What the agent produces panel */}
               <div className="welcome-preview-panel">
                 <div className="preview-header">
                   <div className="preview-tabs">
-                    <span className="preview-tab active">health.ts</span>
-                    <span className="preview-tab">zerops.yaml</span>
+                    <span 
+                      className={`preview-tab ${previewTab === 'health.ts' ? 'active' : ''}`}
+                      onClick={() => setPreviewTab('health.ts')}
+                    >
+                      health.ts
+                    </span>
+                    <span 
+                      className={`preview-tab ${previewTab === 'zerops.yaml' ? 'active' : ''}`}
+                      onClick={() => setPreviewTab('zerops.yaml')}
+                    >
+                      zerops.yaml
+                    </span>
                   </div>
-                  <div className="preview-badge">Live Preview</div>
+                  <div className="preview-badge">Example Output</div>
                 </div>
-                 <div className="preview-body font-mono">
-                  <div className="code-line">
-                    <span className="line-num">1</span>
-                    <span className="keyword">import</span>
-                    <span>{" { FastifyInstance } "}</span>
-                    <span className="keyword">from</span>
-                    <span className="string">"'fastify'"</span>;
-                  </div>
-                  <div className="code-line">
-                    <span className="line-num">2</span>
-                  </div>
-                  <div className="code-line">
-                    <span className="line-num">3</span>
-                    <span className="keyword">export async function</span>
-                    <span className="function">{" healthRoutes"}</span>
-                    <span>{"(fastify: FastifyInstance) {"}</span>
-                  </div>
-                  <div className="code-line remove-line">
-                    <span className="line-num">4</span>
-                    <span className="sign">-</span>
-                    <span>{"  fastify.get("}</span>
-                    <span className="string">"'/health'"</span>
-                    <span>{", "}</span>
-                    <span className="keyword">async</span>
-                    <span>{" () => ({ status: "}</span>
-                    <span className="string">"'running'"</span>
-                    <span>{" }));"}</span>
-                  </div>
-                  <div className="code-line add-line">
-                    <span className="line-num">5</span>
-                    <span className="sign">+</span>
-                    <span>{"  fastify.get("}</span>
-                    <span className="string">"'/health'"</span>
-                    <span>{", "}</span>
-                    <span className="keyword">async</span>
-                    <span>{" () => ({ status: "}</span>
-                    <span className="string">"'ok'"</span>
-                    <span>{", db: "}</span>
-                    <span className="string">"'connected'"</span>
-                    <span>{" }));"}</span>
-                  </div>
-                  <div className="code-line">
-                    <span className="line-num">6</span>
-                    <span>{"}"}</span>
-                  </div>
-                </div>
+
+                {previewTab === 'health.ts' ? (
+                  <pre className="diff-code" style={{ flex: 1, padding: '16px', background: 'rgba(0, 0, 0, 0.15)', margin: 0, overflowX: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span className="diff-line-ctx" style={{ display: 'block', fontSize: '11px' }}>
+                      <span className="diff-sign"> </span>
+                      <span className="hl-keyword">import</span>{" { FastifyInstance } "}<span className="hl-keyword">from</span> <span className="hl-string">"'fastify'"</span>;
+                    </span>
+                    <span className="diff-line-ctx" style={{ display: 'block', fontSize: '11px' }}>
+                      <span className="diff-sign"> </span>
+                    </span>
+                    <span className="diff-line-ctx" style={{ display: 'block', fontSize: '11px' }}>
+                      <span className="diff-sign"> </span>
+                      <span className="hl-keyword">export async function</span><span className="hl-function">{" healthRoutes"}</span><span>{"(fastify: FastifyInstance) {"}</span>
+                    </span>
+                    <span className="diff-line-del" style={{ display: 'block', fontSize: '11px' }}>
+                      <span className="diff-sign">-</span>
+                      <span>{"  fastify.get("}<span className="hl-string">"'/health'"</span>{", "}<span className="hl-keyword">async</span>{" () => ({ status: "}<span className="hl-string">"'running'"</span>{" }));"}</span>
+                    </span>
+                    <span className="diff-line-add" style={{ display: 'block', fontSize: '11px' }}>
+                      <span className="diff-sign">+</span>
+                      <span>{"  fastify.get("}<span className="hl-string">"'/health'"</span>{", "}<span className="hl-keyword">async</span>{" () => ({ status: "}<span className="hl-string">"'ok'"</span>{", db: "}<span className="hl-string">"'connected'"</span>{" }));"}</span>
+                    </span>
+                    <span className="diff-line-ctx" style={{ display: 'block', fontSize: '11px' }}>
+                      <span className="diff-sign"> </span>
+                      <span>{"}"}</span>
+                    </span>
+                  </pre>
+                ) : (
+                  <pre className="diff-code" style={{ flex: 1, padding: '16px', background: 'rgba(0, 0, 0, 0.15)', margin: 0, overflowX: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span className="diff-line-ctx" style={{ display: 'block', fontSize: '11px' }}>
+                      <span className="diff-sign"> </span>
+                      <span className="hl-keyword">zerops:</span>
+                    </span>
+                    <span className="diff-line-ctx" style={{ display: 'block', fontSize: '11px' }}>
+                      <span className="diff-sign"> </span>
+                      <span>{"  - setup: api"}</span>
+                    </span>
+                    <span className="diff-line-ctx" style={{ display: 'block', fontSize: '11px' }}>
+                      <span className="diff-sign"> </span>
+                      <span>{"    run:"}</span>
+                    </span>
+                    <span className="diff-line-ctx" style={{ display: 'block', fontSize: '11px' }}>
+                      <span className="diff-sign"> </span>
+                      <span>{"      ports:"}</span>
+                    </span>
+                    <span className="diff-line-del" style={{ display: 'block', fontSize: '11px' }}>
+                      <span className="diff-sign">-</span>
+                      <span>{"        - port: 3000"}</span>
+                    </span>
+                    <span className="diff-line-add" style={{ display: 'block', fontSize: '11px' }}>
+                      <span className="diff-sign">+</span>
+                      <span>{"        - port: 8080"}</span>
+                    </span>
+                    <span className="diff-line-ctx" style={{ display: 'block', fontSize: '11px' }}>
+                      <span className="diff-sign"> </span>
+                      <span>{"          httpSupport: true"}</span>
+                    </span>
+                  </pre>
+                )}
                 
                 <div className="preview-footer">
                   <div className="preview-status">

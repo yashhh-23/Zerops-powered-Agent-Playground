@@ -3,6 +3,7 @@ import { StatusBadge } from './StatusBadge';
 import type { PlaygroundSession } from '@playground/types';
 import { templateLabel, TEMPLATE_OPTIONS } from '@playground/types';
 import { formatRelativeTime } from '../utils/time';
+import { NodeIcon, ReactIcon, PythonIcon } from './Icons';
 
 interface SessionSidebarProps {
   sessions: PlaygroundSession[];
@@ -21,6 +22,12 @@ interface SessionSidebarProps {
   newTemplate: string;
   setNewTemplate: (template: string) => void;
 }
+
+const renderTemplateIcon = (iconName: string) => {
+  if (iconName === 'react') return <ReactIcon size={14} style={{ color: 'var(--accent)' }} />;
+  if (iconName === 'python') return <PythonIcon size={14} style={{ color: 'var(--amber)' }} />;
+  return <NodeIcon size={14} style={{ color: 'var(--green)' }} />;
+};
 
 export function SessionSidebar({
   sessions,
@@ -149,7 +156,9 @@ export function SessionSidebar({
                   }}
                 >
                   <div className="template-card-header">
-                    <span className="template-icon">{opt.icon}</span>
+                    <span className="template-icon" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                      {renderTemplateIcon(opt.icon)}
+                    </span>
                     <span className="template-card-title">{opt.title}</span>
                   </div>
                   <p className="template-card-desc">{opt.desc}</p>

@@ -4,7 +4,7 @@ import { TaskBadge } from './TaskBadge';
 import { DiffViewer } from './DiffViewer';
 import type { PlaygroundSession, AgentTask } from '@playground/types';
 import { templateLabel } from '@playground/types';
-import { CheckIcon, CrossIcon, SpinnerIcon } from './Icons';
+import { CheckIcon, CrossIcon, SpinnerIcon, LockIcon, AlertIcon } from './Icons';
 
 interface PlaygroundPanelProps {
   session: PlaygroundSession;
@@ -111,10 +111,18 @@ export function PlaygroundPanel({
   // Locked warning text
   const getLockedMessage = () => {
     if (session.status === 'completed') {
-      return "🔒 Edits locked. This session has been completed.";
+      return (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+          <LockIcon size={12} /> Edits locked. This session has been completed.
+        </span>
+      );
     }
     if (session.status === 'failed') {
-      return "⚠️ Session failed. Deployments are disabled.";
+      return (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+          <AlertIcon size={12} /> Session failed. Deployments are disabled.
+        </span>
+      );
     }
     return null;
   };
@@ -309,9 +317,9 @@ export function PlaygroundPanel({
                                   Approved & Deployed
                                 </span>
                               ) : task.deployStatus === 'failed' ? (
-                                <span className="task-decision decision-rejected" style={{ color: 'var(--amber)' }}>
-                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" style={{ marginRight: 5, verticalAlign: 'middle' }} role="img" aria-label="Warning"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                                  ⚠️ Deployment Failed
+                                <span className="task-decision decision-rejected" style={{ color: 'var(--amber)', display: 'inline-flex', alignItems: 'center' }}>
+                                  <AlertIcon size={12} style={{ marginRight: 5, color: 'var(--amber)' }} />
+                                  Deployment Failed
                                 </span>
                               ) : (
                                 <span className="task-decision decision-approved">

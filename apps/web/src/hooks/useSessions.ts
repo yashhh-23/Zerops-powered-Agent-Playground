@@ -35,7 +35,8 @@ async function safeFetch(url: string, init?: RequestInit): Promise<Response> {
 }
 
 export function useSessions() {
-  const [sessions, setSessions]           = useState<PlaygroundSession[]>([]);
+  // Synchronously initialize state from localStorage to prevent screen flicker
+  const [sessions, setSessions]           = useState<PlaygroundSession[]>(() => readLocalSessions());
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [activeSession, setActiveSession] = useState<PlaygroundSession | null>(null);
   const [searchQuery, setSearchQuery]     = useState('');
@@ -47,7 +48,8 @@ export function useSessions() {
   const [isCreatingSession, setIsCreatingSession] = useState(false);
 
   const [loadingHealth,   setLoadingHealth]   = useState(true);
-  const [loadingSessions, setLoadingSessions] = useState(true);
+  // Show loading indicator only if we have zero cached sessions
+  const [loadingSessions, setLoadingSessions] = useState(() => readLocalSessions().length === 0);
   const [loadingDetails,  setLoadingDetails]  = useState(false);
   const [error, setError]                     = useState<string | null>(null);
 
@@ -92,6 +94,10 @@ export function useSessions() {
       
       const updatedSessions = await Promise.all(
         localSessions.map(async (s) => {
+          // Optimization: Skip fetching finished sessions, preventing N+1 network requests
+          if (s.status === 'completed' || s.status === 'failed') {
+            return s;
+          }
           try {
             const r = await safeFetch(`${API}/api/sessions/${s.id}`, {
               headers: { 'X-API-Key': (s as any).apiKey || '' }
@@ -128,14 +134,15 @@ export function useSessions() {
       localSessions.unshift(s);
       localStorage.setItem('playground_sessions', JSON.stringify(localSessions));
 
-      await fetchSessions();
+      // Direct state update avoids N+1 queries during creation
+      setSessions(localSessions);
       setActiveSessionId(s.id);
     } catch (e: any) {
       setError(e.message);
     } finally {
       setIsCreatingSession(false);
     }
-  }, [isCreatingSession, fetchSessions]);
+  }, [isCreatingSession]);
 
   const importSession = useCallback(async (importApiKey: string) => {
     if (!importApiKey.trim()) return;
@@ -157,14 +164,15 @@ export function useSessions() {
       if (!localSessions.some((s: any) => s.id === sessionWithKey.id)) {
         localSessions.unshift(sessionWithKey);
         localStorage.setItem('playground_sessions', JSON.stringify(localSessions));
+        // Direct state update avoids N+1 queries during imports
+        setSessions(localSessions);
       }
 
-      await fetchSessions();
       setActiveSessionId(sessionWithKey.id);
     } catch (e: any) {
       setError(e.message || 'Failed to import session.');
     }
-  }, [fetchSessions]);
+  }, []);
 
   const runAgent = useCallback(async (prompt: string) => {
     if (!prompt.trim() || !activeSessionId || runningTask) return;
