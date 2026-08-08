@@ -1,7 +1,6 @@
 # Zerops Service Definitions
-# Managed services (db, nats) are provisioned through Zerops project import or dashboard:
+# Managed services (db) are provisioned through Zerops project import or dashboard:
 # - db: Managed PostgreSQL (OLTP)
-# - nats: NATS message queue
 
 zerops:
   # Frontend service

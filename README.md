@@ -65,6 +65,9 @@ DATABASE_URL="postgresql://username:password@db.supabase.co:5432/postgres"
 ZEROPS_API_TOKEN="zerops_token_..."
 ZEROPS_CLIENT_ID="client_id_..."
 ZEROPS_API_BASE="https://api.app-prg1.zerops.io/api/rest/public"
+
+# LLM API Settings (Optional - omit or use placeholder to run against the mock agent)
+LLM_API_KEY="hf_token_..."
 ```
 
 ### 3. Synchronize Database Schema
@@ -83,6 +86,9 @@ npm run dev
 ---
 
 ## 📦 Deployment to Zerops
+
+> [!NOTE]
+> This command deploys the **playground application itself** to Zerops. Once the playground is running, the application's internal "Approve & Deploy" button handles the deployment of the generated code to your Zerops project automatically via the Zerops REST API — no local CLI involvement is needed for that loop.
 
 You can deploy the playground directly onto Zerops using `zcli`:
 
