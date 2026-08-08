@@ -110,11 +110,23 @@ export async function createZeropsProject(sessionName: string): Promise<string> 
 /**
  * Compiles the deployment archive, creates a version, uploads it, and deploys it on Zerops
  */
-export async function applyInfraDiff(projectId: string, infraDiff: { zeropsYaml: string }): Promise<boolean> {
+export async function applyInfraDiff(
+  projectId: string,
+  infraDiff: { zeropsYaml: string },
+  onProgress?: (step: 'packaging' | 'uploading' | 'deploying') => Promise<void>
+): Promise<boolean> {
   const apiToken = process.env.ZEROPS_API_TOKEN;
 
   if (!apiToken || apiToken.startsWith('zerops_placeholder')) {
     console.warn('[Zerops] ZEROPS_API_TOKEN is missing. Simulating successful deployment pipeline.');
+    if (onProgress) {
+      await onProgress('packaging');
+      await new Promise(resolve => setTimeout(resolve, 800));
+      await onProgress('uploading');
+      await new Promise(resolve => setTimeout(resolve, 800));
+      await onProgress('deploying');
+      await new Promise(resolve => setTimeout(resolve, 800));
+    }
     console.log(`[Zerops] Simulated: Packaged zerops.yaml content:\n${infraDiff.zeropsYaml}`);
     console.log(`[Zerops] Simulated: Uploaded deployment archive for project ID: ${projectId}`);
     console.log(`[Zerops] Simulated: Deployment build process finished successfully!`);
@@ -124,6 +136,7 @@ export async function applyInfraDiff(projectId: string, infraDiff: { zeropsYaml:
   let zipPath = '';
   try {
     // 1. Package files
+    if (onProgress) await onProgress('packaging');
     zipPath = await createDeploymentZip(infraDiff.zeropsYaml);
 
     // 2. Create app version and get storage URL
@@ -152,9 +165,8 @@ export async function applyInfraDiff(projectId: string, infraDiff: { zeropsYaml:
       throw new Error('Upload storage URL not returned by Zerops app-version endpoint');
     }
 
-    console.log(`[Zerops] App version registered. Version ID: ${versionId}. Uploading ZIP to storage URL...`);
-
     // 3. Upload Zip file to storage URL
+    if (onProgress) await onProgress('uploading');
     const fileStream = fs.createReadStream(zipPath);
     const uploadResponse = await fetch(uploadUrl, {
       method: 'PUT',
@@ -172,6 +184,7 @@ export async function applyInfraDiff(projectId: string, infraDiff: { zeropsYaml:
     console.log(`[Zerops] ZIP upload complete. Triggering build/deploy pipeline...`);
 
     // 4. Trigger build / deploy pipeline
+    if (onProgress) await onProgress('deploying');
     const deployResponse = await fetch(`${API_BASE_URL}/app-version/${versionId}/deploy`, {
       method: 'POST',
       headers: {
@@ -291,7 +304,19 @@ export async function deployToZerops(sessionId: string, task: any): Promise<bool
     try {
       const infraDiff = JSON.parse(task.infraDiff);
       console.log(`[Zerops Integration] Applying infra diff for project: ${projectId}`);
-      const success = await applyInfraDiff(projectId, infraDiff);
+      
+      const onProgress = async (step: 'packaging' | 'uploading' | 'deploying') => {
+        await prisma.agentTask.update({
+          where: { id: task.id },
+          data: { deployStatus: step }
+        });
+        await prisma.playgroundSession.update({
+          where: { id: sessionId },
+          data: { updatedAt: new Date() }
+        });
+      };
+
+      const success = await applyInfraDiff(projectId, infraDiff, onProgress);
       if (success) {
         console.log(`[Zerops Integration] Deployment pipeline successfully executed for task ${task.id}`);
         return true;

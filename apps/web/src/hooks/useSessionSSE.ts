@@ -16,6 +16,7 @@ export function useSessionSSE({
 }: UseSessionSSEProps) {
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [dbHealth, setDbHealth] = useState<'ok' | 'error' | 'unknown'>('unknown');
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<any>(null);
   const errorCountRef = useRef(0);
@@ -24,6 +25,7 @@ export function useSessionSSE({
     // Reset connection state on session change
     setIsConnected(false);
     setConnectionError(null);
+    setDbHealth('unknown');
     errorCountRef.current = 0;
 
     if (reconnectTimeoutRef.current) {
@@ -50,6 +52,9 @@ export function useSessionSSE({
       const session = localSessions.find(s => s.id === sessionId);
       const apiKey = (session as any)?.apiKey || '';
 
+      // SECURITY WARNING: Passing apiKey as a query parameter exposes it in server logs,
+      // load balancer logs, and browser history. We accept this trade-off for SSE connection
+      // since EventSource does not support custom headers natively. Avoid this in sensitive contexts.
       const url = `${API}/api/sessions/${sessionId}/events?apiKey=${encodeURIComponent(apiKey)}`;
       const es = new EventSource(url);
       eventSourceRef.current = es;
@@ -57,8 +62,18 @@ export function useSessionSSE({
       es.addEventListener('open', () => {
         setIsConnected(true);
         setConnectionError(null);
+        setDbHealth('ok');
         errorCountRef.current = 0;
         console.log(`[SSE] Connected to session ${sessionId}`);
+      });
+
+      es.addEventListener('health-update', (event: MessageEvent) => {
+        try {
+          const health = JSON.parse(event.data);
+          setDbHealth(health.db || 'unknown');
+        } catch (err) {
+          console.error('[SSE] Error parsing health-update event data:', err);
+        }
       });
 
       es.addEventListener('task-update', (event: MessageEvent) => {
@@ -95,6 +110,7 @@ export function useSessionSSE({
 
       es.onerror = () => {
         setIsConnected(false);
+        setDbHealth('unknown');
         es.close();
         eventSourceRef.current = null;
 
@@ -128,5 +144,6 @@ export function useSessionSSE({
   return {
     isConnected,
     connectionError,
+    dbHealth,
   };
 }

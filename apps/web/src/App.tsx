@@ -8,6 +8,8 @@ export default function App() {
   const {
     API,
     sessions,
+    searchQuery,
+    setSearchQuery,
     activeSessionId,
     activeSession,
     setActiveSessionId,
@@ -25,12 +27,13 @@ export default function App() {
     refreshHealth,
     fetchSessionDetails,
     createSession,
+    importSession,
     runAgent,
     approveTask,
     rejectTask,
   } = useSessions();
 
-  const { isConnected, connectionError } = useSessionSSE({
+  const { isConnected, connectionError, dbHealth: sseDbHealth } = useSessionSSE({
     sessionId: activeSessionId,
     API,
     setActiveSession,
@@ -57,11 +60,14 @@ export default function App() {
       <div className="layout">
         <SessionSidebar 
           sessions={sessions}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
           activeSessionId={activeSessionId}
           onSelectSession={setActiveSessionId}
           onCreateSession={createSession}
-          apiHealth={apiHealth}
-          dbHealth={dbHealth}
+          onImportSession={importSession}
+          apiHealth={isConnected ? { status: 'ok' } : apiHealth}
+          dbHealth={activeSessionId && isConnected ? { status: sseDbHealth } : dbHealth}
           loadingHealth={loadingHealth}
           loadingSessions={loadingSessions}
           refreshHealth={refreshHealth}

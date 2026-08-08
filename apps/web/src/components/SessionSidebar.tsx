@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
 import { StatusBadge } from './StatusBadge';
 import type { PlaygroundSession } from '@playground/types';
+import { formatRelativeTime } from '../utils/time';
 
 interface SessionSidebarProps {
   sessions: PlaygroundSession[];
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
   activeSessionId: string | null;
   onSelectSession: (id: string) => void;
   onCreateSession: (name: string, template: string) => Promise<void>;
+  onImportSession: (apiKey: string) => Promise<void>;
   apiHealth: any;
   dbHealth: any;
   loadingHealth: boolean;
@@ -17,9 +21,12 @@ interface SessionSidebarProps {
 
 export function SessionSidebar({
   sessions,
+  searchQuery,
+  setSearchQuery,
   activeSessionId,
   onSelectSession,
   onCreateSession,
+  onImportSession,
   apiHealth,
   dbHealth,
   loadingHealth,
@@ -29,12 +36,23 @@ export function SessionSidebar({
 }: SessionSidebarProps) {
   const [newName, setNewName] = useState('');
   const [newTemplate, setNewTemplate] = useState('node-api-basic');
+  const [importKey, setImportKey] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim() || isCreatingSession) return;
     await onCreateSession(newName.trim(), newTemplate);
     setNewName('');
+  };
+
+  const handleImportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!importKey.trim() || isImporting) return;
+    setIsImporting(true);
+    await onImportSession(importKey.trim());
+    setImportKey('');
+    setIsImporting(false);
   };
 
   const dotClass = (status: string) =>
@@ -48,15 +66,22 @@ export function SessionSidebar({
 
   return (
     <aside className="sidebar" aria-label="Sidebar navigation">
-      {/* Logo */}
+      {/* Branded Logo */}
       <div className="sidebar-logo">
-        <div className="logo-icon">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="white" role="img" aria-label="Lightning logo">
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+        <div className="logo-icon-custom">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="2" y="2" width="20" height="8" rx="1.5" />
+            <rect x="2" y="14" width="20" height="8" rx="1.5" />
+            <line x1="6" y1="6" x2="6.01" y2="6" />
+            <line x1="6" y1="18" x2="6.01" y2="18" />
+            <path d="M18 6h-4" />
+            <path d="M18 18h-4" />
           </svg>
         </div>
-        <span className="logo-name">Zerops Agent</span>
-        <span className="logo-tag">Playground</span>
+        <div className="brand-group">
+          <span className="brand-name">Zerops Agent</span>
+          <span className="brand-sub">PLAYGROUND</span>
+        </div>
       </div>
 
       <div className="sidebar-body">
@@ -64,22 +89,27 @@ export function SessionSidebar({
         <section className="sidebar-section" aria-labelledby="status-heading">
           <div className="section-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span id="status-heading">System Status</span>
-            <button className="health-refresh" onClick={refreshHealth} title="Refresh health status" aria-label="Refresh health status" id="btn-refresh-health">
-              {loadingHealth ? <span className="spinning">↻</span> : '↻'}
+            <button className="health-refresh-btn" onClick={refreshHealth} title="Refresh health status" aria-label="Refresh health status" id="btn-refresh-health">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={loadingHealth ? 'spinning' : ''}>
+                <path d="M23 4v6h-6"/>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+              </svg>
             </button>
           </div>
           <div className="health-grid">
             <div className="health-row">
               <span className="health-label">API Server</span>
-              {apiHealth?.status === 'ok'
-                ? <span className="pill pill-green" id="status-api">Online</span>
-                : <span className="pill pill-red"   id="status-api">Offline</span>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span className={`pulse-dot ${apiHealth?.status === 'ok' ? 'pulse-green' : 'pulse-red'}`} />
+                <span className="health-val">{apiHealth?.status === 'ok' ? 'Online' : 'Offline'}</span>
+              </div>
             </div>
             <div className="health-row">
               <span className="health-label">Database</span>
-              {dbHealth?.status === 'ok'
-                ? <span className="pill pill-green" id="status-db">Connected</span>
-                : <span className="pill pill-red"   id="status-db">Down</span>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span className={`pulse-dot ${dbHealth?.status === 'ok' ? 'pulse-green' : dbHealth?.status === 'error' ? 'pulse-red' : 'pulse-amber'}`} />
+                <span className="health-val">{dbHealth?.status === 'ok' ? 'Connected' : dbHealth?.status === 'error' ? 'Down' : 'Connecting...'}</span>
+              </div>
             </div>
           </div>
         </section>
@@ -102,21 +132,74 @@ export function SessionSidebar({
               required
             />
             
-            <label htmlFor="select-template" className="visually-hidden">Select Playground Stack Template</label>
-            <select
-              id="select-template"
-              className="field-select"
-              value={newTemplate}
-              onChange={e => setNewTemplate(e.target.value)}
-              disabled={isCreatingSession}
-            >
-              <option value="node-api-basic">Node.js API Basic</option>
-              <option value="react-static-basic">React Static Basic</option>
-              <option value="python-api-basic">Python API Basic</option>
-            </select>
+            <span className="field-help-label">Select Stack Template</span>
+            <div className="template-cards">
+              <div
+                className={`template-card ${newTemplate === 'node-api-basic' ? 'selected' : ''}`}
+                onClick={() => !isCreatingSession && setNewTemplate('node-api-basic')}
+                role="radio"
+                aria-checked={newTemplate === 'node-api-basic'}
+                tabIndex={0}
+              >
+                <div className="template-card-header">
+                  <span className="template-icon">🟢</span>
+                  <span className="template-card-title">Node.js API</span>
+                </div>
+                <p className="template-card-desc">Fastify backend, Postgres DB, port 8080</p>
+              </div>
+
+              <div
+                className={`template-card ${newTemplate === 'react-static-basic' ? 'selected' : ''}`}
+                onClick={() => !isCreatingSession && setNewTemplate('react-static-basic')}
+                role="radio"
+                aria-checked={newTemplate === 'react-static-basic'}
+                tabIndex={0}
+              >
+                <div className="template-card-header">
+                  <span className="template-icon">⚛️</span>
+                  <span className="template-card-title">React Static</span>
+                </div>
+                <p className="template-card-desc">Vite frontend app, static files, port 3000</p>
+              </div>
+
+              <div
+                className={`template-card ${newTemplate === 'python-api-basic' ? 'selected' : ''}`}
+                onClick={() => !isCreatingSession && setNewTemplate('python-api-basic')}
+                role="radio"
+                aria-checked={newTemplate === 'python-api-basic'}
+                tabIndex={0}
+              >
+                <div className="template-card-header">
+                  <span className="template-icon">🐍</span>
+                  <span className="template-card-title">Python API</span>
+                </div>
+                <p className="template-card-desc">FastAPI backend application, port 8000</p>
+              </div>
+            </div>
             
             <button id="btn-create-session" type="submit" className="btn-primary" disabled={isCreatingSession || !newName.trim()}>
               {isCreatingSession ? 'Creating...' : 'Create Session'}
+            </button>
+          </form>
+        </section>
+
+        {/* Import Session */}
+        <section className="sidebar-section" aria-labelledby="import-playground-heading">
+          <span id="import-playground-heading" className="section-label">Import Session</span>
+          <form className="create-form" onSubmit={handleImportSubmit} id="form-import-session">
+            <label htmlFor="input-import-key" className="visually-hidden">Session API Key</label>
+            <input
+              id="input-import-key"
+              className="field-input"
+              type="text"
+              placeholder="Paste API key here…"
+              value={importKey}
+              onChange={e => setImportKey(e.target.value)}
+              disabled={isImporting}
+              required
+            />
+            <button id="btn-import-session" type="submit" className="btn-primary" disabled={isImporting || !importKey.trim()}>
+              {isImporting ? 'Importing...' : 'Import Session'}
             </button>
           </form>
         </section>
@@ -125,15 +208,28 @@ export function SessionSidebar({
 
         {/* Session List */}
         <section className="sidebar-section" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }} aria-labelledby="playgrounds-heading">
-          <div className="section-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span id="playgrounds-heading">Playgrounds</span>
-            <span className="tasks-count">{sessions.length}</span>
+          <div className="section-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span id="playgrounds-heading">Playgrounds</span>
+              <span className="tasks-count">{sessions.length}</span>
+            </div>
+          </div>
+
+          <div className="search-container">
+            <input
+              type="text"
+              placeholder="Search playgrounds…"
+              className="field-input search-input"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              aria-label="Search sessions"
+            />
           </div>
 
           {loadingSessions ? (
             <div className="empty-text">Loading…</div>
           ) : sessions.length === 0 ? (
-            <div className="empty-text">No sessions yet.</div>
+            <div className="empty-text">{searchQuery ? 'No matching playgrounds found.' : 'No sessions yet.'}</div>
           ) : (
             <div className="session-list" role="listbox" aria-label="Playground sessions list">
               {sessions.map(s => (
@@ -162,12 +258,22 @@ export function SessionSidebar({
                   <div className="session-meta">
                     <span>{templateLabel(s.template)}</span>
                     <span>·</span>
-                    <span>{new Date(s.createdAt).toLocaleDateString()}</span>
+                    <span>{formatRelativeTime(s.createdAt)}</span>
                   </div>
                 </div>
               ))}
             </div>
           )}
+
+          {/* Browser Warning Note */}
+          <div className="sidebar-warning-note">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+            <span>Sessions live locally in this browser. Keep copies of API keys to restore.</span>
+          </div>
         </section>
       </div>
     </aside>

@@ -189,6 +189,9 @@ fastify.get('/api/sessions/:id/events', {
   },
 }, async (request: FastifyRequest, reply: FastifyReply) => {
   const { id: sessionId } = request.params as { id: string };
+  // SECURITY WARNING: We extract apiKey from query string if headers are not available.
+  // Transmitting credentials in the query string is vulnerable to leakage via server logs and browser history.
+  // This is acceptable here only because EventSource does not support custom headers natively.
   const apiKey = (request.headers['x-api-key'] || (request.query as any)?.apiKey) as string;
 
   const session = await prisma.playgroundSession.findFirst({
@@ -220,6 +223,7 @@ fastify.get('/api/sessions/:id/events', {
     reply.raw.write(': heartbeat\n\n');
   }, 15000);
 
+  let tickCount = 0;
   let lastTimestamp = new Date();
   let lastSessionUpdatedAt = session.updatedAt;
   let isPolling = false;
@@ -227,6 +231,7 @@ fastify.get('/api/sessions/:id/events', {
   const pollInterval = setInterval(async () => {
     if (isPolling) return;
     isPolling = true;
+    let dbStatus = 'ok';
     try {
       if (reply.raw.destroyed) {
         clearInterval(pollInterval);
@@ -258,8 +263,14 @@ fastify.get('/api/sessions/:id/events', {
       }
     } catch (error) {
       console.error('[SSE] Error polling session/task updates:', error);
+      dbStatus = 'error';
     } finally {
       isPolling = false;
+      // Send dynamic health status event to client
+      if (tickCount % 5 === 0 || dbStatus === 'error') {
+        reply.raw.write(`event: health-update\ndata: ${JSON.stringify({ db: dbStatus })}\n\n`);
+      }
+      tickCount++;
     }
   }, 1000);
 

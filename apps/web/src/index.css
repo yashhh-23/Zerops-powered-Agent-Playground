@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=JetBrains+Mono:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
 
 *, *::before, *::after {
   box-sizing: border-box;
@@ -7,34 +7,46 @@
 }
 
 :root {
-  --bg-base:      #080c14;
-  --bg-surface:   #0d1117;
-  --bg-elevated:  #161b26;
-  --bg-subtle:    #1c2333;
-  --border:       #21293a;
-  --border-hover: #2d3a50;
-  --text-primary: #e6edf3;
-  --text-secondary: #8b949e;
-  --text-muted:   #484f58;
-  --accent:       #4f8ef7;
-  --accent-dim:   rgba(79,142,247,0.12);
-  --accent-border:rgba(79,142,247,0.35);
-  --green:        #3fb950;
-  --green-dim:    rgba(63,185,80,0.12);
-  --red:          #f85149;
-  --red-dim:      rgba(248,81,73,0.12);
-  --amber:        #d29922;
-  --amber-dim:    rgba(210,153,34,0.12);
-  --mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  --bg-base:      #05080f;
+  --bg-surface:   #090d16;
+  --bg-elevated:  #101524;
+  --bg-subtle:    #161d2f;
+  --border:       #1b243b;
+  --border-hover: #263354;
+  --text-primary: #f0f4fc;
+  --text-secondary: #94a3b8;
+  --text-muted:   #4e5d78;
+  
+  /* Bespoke Cyan/Teal developer accent */
+  --accent:       #0ea5e9;
+  --accent-dim:   rgba(14, 165, 233, 0.08);
+  --accent-border:rgba(14, 165, 233, 0.3);
+  
+  --green:        #10b981;
+  --green-dim:    rgba(16, 185, 129, 0.08);
+  --green-border: rgba(16, 185, 129, 0.25);
+  
+  --red:          #f43f5e;
+  --red-dim:      rgba(244, 63, 94, 0.08);
+  
+  --amber:        #f59e0b;
+  --amber-dim:    rgba(245, 158, 11, 0.08);
+  
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  
+  /* Radii Geometry Contrast */
+  --radius-container: 8px;
+  --radius-interactive: 4px;
 }
 
 html, body {
   height: 100%;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--font-sans);
   background: var(--bg-base);
   color: var(--text-primary);
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -49,7 +61,17 @@ html, body {
   margin: 0;
 }
 
+code, pre {
+  font-family: var(--font-mono);
+}
+
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--border-hover); }
+
+/* Monospace headings for developer IDE feel */
+h1, h2, h3, h4, h5, h6, .section-label, .btn-primary, .btn-accent, .pill, .status-badge, .logo-name, .logo-tag, .brand-sub, .kbd {
+  font-family: var(--font-mono) !important;
+  letter-spacing: -0.02em;
+}

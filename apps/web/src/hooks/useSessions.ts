@@ -23,6 +23,7 @@ export function useSessions() {
   const [sessions, setSessions]           = useState<PlaygroundSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [activeSession, setActiveSession] = useState<PlaygroundSession | null>(null);
+  const [searchQuery, setSearchQuery]     = useState('');
 
   const [apiHealth, setApiHealth]   = useState<{ status: string } | null>(null);
   const [dbHealth,  setDbHealth]    = useState<{ status: string; db?: string } | null>(null);
@@ -124,6 +125,36 @@ export function useSessions() {
     }
   }, [isCreatingSession, fetchSessions]);
 
+  const importSession = useCallback(async (importApiKey: string) => {
+    if (!importApiKey.trim()) return;
+    setError(null);
+    try {
+      const r = await safeFetch(`${API}/api/sessions`, {
+        headers: { 'X-API-Key': importApiKey.trim() }
+      });
+      const data = await r.json();
+      if (!Array.isArray(data) || data.length === 0) {
+        throw new Error('No session found for this API Key.');
+      }
+      
+      const foundSession = data[0];
+      const sessionWithKey = { ...foundSession, apiKey: importApiKey.trim() };
+
+      const stored = localStorage.getItem('playground_sessions');
+      const localSessions = stored ? JSON.parse(stored) : [];
+      
+      if (!localSessions.some((s: any) => s.id === sessionWithKey.id)) {
+        localSessions.unshift(sessionWithKey);
+        localStorage.setItem('playground_sessions', JSON.stringify(localSessions));
+      }
+
+      await fetchSessions();
+      setActiveSessionId(sessionWithKey.id);
+    } catch (e: any) {
+      setError(e.message || 'Failed to import session.');
+    }
+  }, [fetchSessions]);
+
   const runAgent = useCallback(async (prompt: string) => {
     if (!prompt.trim() || !activeSessionId || runningTask) return;
     setRunningTask(true);
@@ -204,9 +235,15 @@ export function useSessions() {
     }
   }, [activeSessionId, fetchSessionDetails]);
 
+  const filteredSessions = sessions.filter(s =>
+    s.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return {
     API,
-    sessions,
+    sessions: filteredSessions,
+    searchQuery,
+    setSearchQuery,
     activeSessionId,
     activeSession,
     setActiveSessionId,
@@ -225,6 +262,7 @@ export function useSessions() {
     fetchSessions,
     fetchSessionDetails,
     createSession,
+    importSession,
     runAgent,
     approveTask,
     rejectTask,

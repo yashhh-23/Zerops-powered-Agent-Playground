@@ -3,6 +3,7 @@ export interface PlaygroundSession {
   name: string;
   template: string;
   status: string; // 'active' | 'completed' | 'failed'
+  apiKey?: string;
   zeropsProjectId?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -14,7 +15,7 @@ export interface AgentTask {
   sessionId: string;
   prompt: string;
   status: string; // 'pending' | 'processing' | 'completed' | 'failed'
-  deployStatus?: 'pending' | 'deploying' | 'deployed' | 'failed' | null;
+  deployStatus?: 'pending' | 'packaging' | 'uploading' | 'deploying' | 'deployed' | 'failed' | null;
   codeDiff: string | null;
   infraDiff: string | null;
   createdAt: string;
