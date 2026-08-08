@@ -1980,36 +1980,6 @@ button:hover .tech-icon,
   word-break: break-all;
 }
 
-.infra-line-container {
-  display: flex;
-  align-items: stretch;
-  transition: background-color var(--duration-fast) var(--ease-out);
-  font-family: var(--font-mono);
-  font-variant-ligatures: normal;
-  font-size: 11.5px;
-  line-height: 1.6;
-}
-
-.infra-line-container:hover {
-  background-color: rgba(255, 255, 255, 0.02);
-}
-
-.infra-line-num {
-  width: 32px;
-  text-align: right;
-  padding-right: var(--space-sm);
-  color: var(--text-muted);
-  user-select: none;
-  border-right: 1px solid var(--border);
-  opacity: 0.65;
-}
-
-.infra-line-content {
-  flex: 1;
-  padding-left: var(--space-sm);
-  white-space: pre-wrap;
-  word-break: break-all;
-}
 
 .copy-code-btn {
   background: transparent;

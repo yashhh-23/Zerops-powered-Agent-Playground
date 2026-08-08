@@ -398,13 +398,7 @@ export function DiffViewer({ codeDiffStr, infraDiffStr, deployStatus }: DiffView
             {!infraCollapsed && (
               <pre className="infra-code">
                 {infraDiff.zeropsYaml.split('\n').map((line, li) => (
-                  <div key={li} className="infra-line-container">
-                    <span className="infra-line-num">{li + 1}</span>
-                    <span
-                      className="infra-line-content"
-                      dangerouslySetInnerHTML={highlightLine(line, 'yaml')}
-                    />
-                  </div>
+                  <DiffLine key={li} line={line} lang="yaml" lineNum={li + 1} />
                 ))}
               </pre>
             )}
