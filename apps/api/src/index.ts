@@ -258,14 +258,16 @@ fastify.get('/api/sessions/:id/events', {
     }
   }, 1000);
 
-  request.raw.on('close', () => {
-    clearInterval(pollInterval);
-    clearInterval(heartbeat);
-    console.log(`[SSE] Connection closed for session ${sessionId}`);
-  });
-
-  // Fastify handles the reply internally when reply.raw is written to directly
   reply.sent = true;
+
+  return new Promise<void>((resolve) => {
+    request.raw.on('close', () => {
+      clearInterval(pollInterval);
+      clearInterval(heartbeat);
+      console.log(`[SSE] Connection closed for session ${sessionId}`);
+      resolve();
+    });
+  });
 });
 
 // Create a new task in a playground session (Scoped by API Key)
