@@ -7,6 +7,20 @@ import { prisma } from '@playground/db';
 
 dotenv.config();
 
+async function assertOk(response: any, label: string) {
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`${label} failed (${response.status}): ${errorText}`);
+  }
+}
+
+async function markDeployFailed(taskId: string, step: string, message: string) {
+  await prisma.agentTask.update({
+    where: { id: taskId },
+    data: { deployStatus: `failed-${step}`, deployError: message }
+  });
+}
+
 const API_BASE_URL = process.env.ZEROPS_API_BASE || 'https://api.app-prg1.zerops.io/api/rest/public';
 
 /**
@@ -91,10 +105,7 @@ export async function createZeropsProject(sessionName: string): Promise<string> 
       }),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Zerops API create project failed (${response.status}): ${errorText}`);
-    }
+    await assertOk(response, 'Zerops API create project');
 
     const data: any = await response.json();
     const projectId = data.id || data.project?.id || `project-${Date.now()}`;
@@ -149,10 +160,7 @@ export async function applyInfraDiff(
       },
     });
 
-    if (!servicesRes.ok) {
-      const errorText = await servicesRes.text();
-      throw new Error(`Failed to list service stacks for project (${servicesRes.status}): ${errorText}`);
-    }
+    await assertOk(servicesRes, 'Failed to list service stacks for project');
 
     const servicesData: any = await servicesRes.json();
     const serviceStacks = servicesData.items || [];
@@ -178,10 +186,7 @@ export async function applyInfraDiff(
       }),
     });
 
-    if (!versionResponse.ok) {
-      const errorText = await versionResponse.text();
-      throw new Error(`Zerops API version creation failed (${versionResponse.status}): ${errorText}`);
-    }
+    await assertOk(versionResponse, 'Zerops API version creation');
 
     const versionData: any = await versionResponse.json();
     const uploadUrl = versionData.uploadUrl || versionData.storageUrl;
@@ -202,10 +207,7 @@ export async function applyInfraDiff(
       body: fileStream as any,
     });
 
-    if (!uploadResponse.ok) {
-      const errorText = await uploadResponse.text();
-      throw new Error(`Uploading deployment ZIP failed (${uploadResponse.status}): ${errorText}`);
-    }
+    await assertOk(uploadResponse, 'Uploading deployment ZIP');
 
     console.log(`[Zerops] ZIP upload complete. Triggering build/deploy pipeline...`);
 
@@ -222,10 +224,7 @@ export async function applyInfraDiff(
       body: JSON.stringify({}),
     });
 
-    if (!deployResponse.ok) {
-      const errorText = await deployResponse.text();
-      throw new Error(`Deploy trigger failed (${deployResponse.status}): ${errorText}`);
-    }
+    await assertOk(deployResponse, 'Deploy trigger');
 
     console.log(`[Zerops] Deployment successfully triggered for version ID: ${versionId}`);
     return true;
@@ -352,18 +351,12 @@ export async function deployToZerops(sessionId: string, task: any): Promise<bool
         return true;
       } else {
         console.error(`[Zerops Integration] Deployment pipeline execution failed for task ${task.id}`);
-        await prisma.agentTask.update({
-          where: { id: task.id },
-          data: { deployStatus: `failed-${currentStep}`, deployError: 'Deployment process failed' }
-        });
+        await markDeployFailed(task.id, currentStep, 'Deployment process failed');
         return false;
       }
     } catch (err: any) {
       console.error(`[Zerops Integration] Failed to parse/apply infra diff for task ${task.id}:`, err.message);
-      await prisma.agentTask.update({
-        where: { id: task.id },
-        data: { deployStatus: `failed-${currentStep}`, deployError: err.message }
-      });
+      await markDeployFailed(task.id, currentStep, err.message);
       throw err;
     }
   } else {

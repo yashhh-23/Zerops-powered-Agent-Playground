@@ -4,10 +4,14 @@ import fastifyRateLimit from '@fastify/rate-limit';
 import dotenv from 'dotenv';
 import path from 'path';
 
-// Load environment variables
+// Load environment variables from different directory contexts:
+// 1. Fallback to default behavior (current working directory)
 dotenv.config();
+// 2. Relative to build/source directory when executing nested API package directly (apps/api/src)
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+// 3. Absolute path to current working directory
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+// 4. Relative to root workspace when running commands from apps/api directory
 dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
 
 import { prisma } from '@playground/db';
