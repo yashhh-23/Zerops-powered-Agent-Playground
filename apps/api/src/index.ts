@@ -36,9 +36,8 @@ const fastify = Fastify({
 });
 
 // Configure CORS
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 fastify.register(cors, {
-  origin: [FRONTEND_URL, 'http://localhost:3000'],
+  origin: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
 });
