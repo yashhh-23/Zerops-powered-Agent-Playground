@@ -16,7 +16,8 @@
     "db:generate": "npm run generate --workspace=packages/db",
     "db:migrate": "npm run migrate --workspace=packages/db",
     "postinstall": "npm run db:generate",
-    "start:all": "npx prisma db push --accept-data-loss --schema=packages/db/schema.prisma && concurrently \"npm run start --workspace=apps/api\" \"npx serve apps/web/dist -l 3000 -n -s\""
+    "start:all": "npx prisma db push --accept-data-loss --schema=packages/db/schema.prisma && concurrently \"npm run start --workspace=apps/api\" \"npx serve apps/web/dist -l 3000 -n -s\"",
+    "test": "vitest run --exclude \"**/dist/**\""
   },
   "devDependencies": {
     "concurrently": "^10.0.4",
