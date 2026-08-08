@@ -57,8 +57,3 @@ zerops:
           httpSupport: true
       # Start Fastify and Vite preview concurrently
       start: env | grep -E "connectionString|db|DATABASE|POSTGRES" || true; npm run start:all
-      envVariables:
-        # ⚠️ SECRETS SHOULD NOT BE HARDCODED IN THIS FILE ⚠️
-        # Please set the DATABASE_URL environment variable securely in your Zerops Project Dashboard:
-        # Go to your 'api' service -> Environment Variables -> Add new variable
-        DATABASE_URL: ${DATABASE_URL}
