@@ -4,6 +4,7 @@ import { useSessionSSE } from './hooks/useSessionSSE';
 import { SessionSidebar } from './components/SessionSidebar';
 import { PlaygroundPanel } from './components/PlaygroundPanel';
 import { SpinnerIcon, AlertIcon } from './components/Icons';
+import { DiffLine } from './components/DiffViewer';
 import './App.css';
 
 export default function App() {
@@ -184,60 +185,22 @@ export default function App() {
 
                 {previewTab === 'health.ts' ? (
                   <pre className="diff-code" style={{ flex: 1, padding: '16px', background: 'rgba(0, 0, 0, 0.15)', margin: 0, overflowX: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <span className="diff-line-ctx preview-diff-line">
-                      <span className="diff-sign"> </span>
-                      <span className="hl-keyword">import</span>{" { FastifyInstance } "}<span className="hl-keyword">from</span> <span className="hl-string">"'fastify'"</span>;
-                    </span>
-                    <span className="diff-line-ctx preview-diff-line">
-                      <span className="diff-sign"> </span>
-                    </span>
-                    <span className="diff-line-ctx preview-diff-line">
-                      <span className="diff-sign"> </span>
-                      <span className="hl-keyword">export async function</span><span className="hl-function">{" healthRoutes"}</span><span>{"(fastify: FastifyInstance) {"}</span>
-                    </span>
-                    <span className="diff-line-del preview-diff-line">
-                      <span className="diff-sign">-</span>
-                      <span>{"  fastify.get("}<span className="hl-string">"'/health'"</span>{", "}<span className="hl-keyword">async</span>{" () => ({ status: "}<span className="hl-string">"'running'"</span>{" }));"}</span>
-                    </span>
-                    <span className="diff-line-add preview-diff-line">
-                      <span className="diff-sign">+</span>
-                      <span>{"  fastify.get("}<span className="hl-string">"'/health'"</span>{", "}<span className="hl-keyword">async</span>{" () => ({ status: "}<span className="hl-string">"'ok'"</span>{", db: "}<span className="hl-string">"'connected'"</span>{" }));"}</span>
-                    </span>
-                    <span className="diff-line-ctx preview-diff-line">
-                      <span className="diff-sign"> </span>
-                      <span>{"}"}</span>
-                    </span>
+                    <DiffLine line=" import { FastifyInstance } from 'fastify';" lang="ts" className="preview-diff-line" />
+                    <DiffLine line=" " lang="ts" className="preview-diff-line" />
+                    <DiffLine line=" export async function healthRoutes(fastify: FastifyInstance) {" lang="ts" className="preview-diff-line" />
+                    <DiffLine line="-  fastify.get('/health', async () => ({ status: 'running' }));" lang="ts" className="preview-diff-line" />
+                    <DiffLine line="+  fastify.get('/health', async () => ({ status: 'ok', db: 'connected' }));" lang="ts" className="preview-diff-line" />
+                    <DiffLine line=" }" lang="ts" className="preview-diff-line" />
                   </pre>
                 ) : (
                   <pre className="diff-code" style={{ flex: 1, padding: '16px', background: 'rgba(0, 0, 0, 0.15)', margin: 0, overflowX: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <span className="diff-line-ctx preview-diff-line">
-                      <span className="diff-sign"> </span>
-                      <span className="hl-keyword">zerops:</span>
-                    </span>
-                    <span className="diff-line-ctx preview-diff-line">
-                      <span className="diff-sign"> </span>
-                      <span>{"  - setup: api"}</span>
-                    </span>
-                    <span className="diff-line-ctx preview-diff-line">
-                      <span className="diff-sign"> </span>
-                      <span>{"    run:"}</span>
-                    </span>
-                    <span className="diff-line-ctx preview-diff-line">
-                      <span className="diff-sign"> </span>
-                      <span>{"      ports:"}</span>
-                    </span>
-                    <span className="diff-line-del preview-diff-line">
-                      <span className="diff-sign">-</span>
-                      <span>{"        - port: 3000"}</span>
-                    </span>
-                    <span className="diff-line-add preview-diff-line">
-                      <span className="diff-sign">+</span>
-                      <span>{"        - port: 8080"}</span>
-                    </span>
-                    <span className="diff-line-ctx preview-diff-line">
-                      <span className="diff-sign"> </span>
-                      <span>{"          httpSupport: true"}</span>
-                    </span>
+                    <DiffLine line=" zerops:" lang="yaml" className="preview-diff-line" />
+                    <DiffLine line="   - setup: api" lang="yaml" className="preview-diff-line" />
+                    <DiffLine line="     run:" lang="yaml" className="preview-diff-line" />
+                    <DiffLine line="       ports:" lang="yaml" className="preview-diff-line" />
+                    <DiffLine line="-        - port: 3000" lang="yaml" className="preview-diff-line" />
+                    <DiffLine line="+        - port: 8080" lang="yaml" className="preview-diff-line" />
+                    <DiffLine line="           httpSupport: true" lang="yaml" className="preview-diff-line" />
                   </pre>
                 )}
                 

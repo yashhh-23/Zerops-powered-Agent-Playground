@@ -171,6 +171,25 @@ function highlightLine(line: string, lang: keyof typeof KEYWORDS = 'js'): { __ht
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
+export interface DiffLineProps {
+  line: string;
+  lang?: string;
+  className?: string;
+}
+
+export function DiffLine({ line, lang = 'js', className = '' }: DiffLineProps) {
+  const prefix = line.charAt(0);
+  const cls = prefix === '+' ? 'diff-line-add'
+            : prefix === '-' ? 'diff-line-del'
+            : 'diff-line-ctx';
+  return (
+    <span
+      className={`${cls} ${className}`}
+      dangerouslySetInnerHTML={highlightLine(line, lang)}
+    />
+  );
+}
+
 export function DiffViewer({ codeDiffStr, infraDiffStr, deployStatus }: DiffViewerProps) {
   const [collapsedFiles, setCollapsedFiles] = useState<Record<string, boolean>>({});
   const [infraCollapsed, setInfraCollapsed] = useState(false);
@@ -317,18 +336,9 @@ export function DiffViewer({ codeDiffStr, infraDiffStr, deployStatus }: DiffView
 
               {!isCollapsed && (
                 <pre className="diff-code">
-                  {file.diff?.split('\n').map((line, li) => {
-                    const cls = line.startsWith('+') ? 'diff-line-add'
-                              : line.startsWith('-') ? 'diff-line-del'
-                              : 'diff-line-ctx';
-                    return (
-                      <span
-                        key={li}
-                        className={cls}
-                        dangerouslySetInnerHTML={highlightLine(line, lang)}
-                      />
-                    );
-                  })}
+                  {file.diff?.split('\n').map((line, li) => (
+                    <DiffLine key={li} line={line} lang={lang} />
+                  ))}
                 </pre>
               )}
             </div>

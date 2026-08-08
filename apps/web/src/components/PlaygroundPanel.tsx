@@ -39,6 +39,11 @@ export function PlaygroundPanel({
   const [copiedId, setCopiedId] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
+
+  const toggleTaskExpanded = (taskId: string) => {
+    setExpandedTasks(prev => ({ ...prev, [taskId]: !prev[taskId] }));
+  };
 
   // Rotate prompt placeholders every 5s
   useEffect(() => {
@@ -280,88 +285,104 @@ export function PlaygroundPanel({
                 </div>
               ) : (
                 <div className="task-list" id="task-list" role="feed" aria-label="Task timeline stream">
-                  {[...session.agentTasks].reverse().map((task: AgentTask) => (
-                    <article key={task.id} className="task-card" id={`task-card-${task.id}`} aria-labelledby={`task-card-title-${task.id}`}>
-                      {/* Header */}
-                      <div className="task-card-header">
-                        <span id={`task-card-title-${task.id}`} className="task-prompt-text">{task.prompt}</span>
-                        <div className="task-header-right">
-                          <span className="task-id">task_{task.id.slice(-6)}</span>
-                          <TaskBadge status={task.status} />
-                        </div>
-                      </div>
-
-                      {/* Diff output */}
-                      {(task.codeDiff || task.infraDiff) && (
-                        <DiffViewer codeDiffStr={task.codeDiff} infraDiffStr={task.infraDiff} deployStatus={task.deployStatus} />
-                      )}
-
-                      {/* Actions */}
-                      {task.status === 'completed' && (
-                        <div className="task-actions">
-                          <span className="task-actions-label">
-                            Created {new Date(task.createdAt).toLocaleTimeString()}
+                  {[...session.agentTasks].reverse().map((task: AgentTask, idx: number) => {
+                    const isExpanded = expandedTasks[task.id] ?? (idx === 0);
+                    return (
+                      <article key={task.id} className={`task-card ${isExpanded ? 'expanded' : 'collapsed'}`} id={`task-card-${task.id}`} aria-labelledby={`task-card-title-${task.id}`}>
+                        {/* Header */}
+                        <div 
+                          className="task-card-header" 
+                          onClick={() => toggleTaskExpanded(task.id)} 
+                          style={{ cursor: 'pointer', userSelect: 'none', borderBottom: isExpanded ? '1px solid var(--border)' : 'none' }}
+                        >
+                          <span id={`task-card-title-${task.id}`} className="task-prompt-text" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                            <span className="collapse-arrow" style={{ display: 'inline-block', transition: 'transform 0.2s', transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)', fontSize: '10px', color: 'var(--text-muted)' }}>▼</span>
+                            {task.prompt}
                           </span>
-                          {task.approved === true ? (
-                            <>
-                              {task.deployStatus === 'packaging' || task.deployStatus === 'uploading' || task.deployStatus === 'deploying' ? (
-                                <span className="task-decision decision-deploying">
-                                  <SpinnerIcon size={12} strokeWidth={3} style={{ marginRight: 5 }} />
-                                  {task.deployStatus === 'packaging' ? 'Packaging Build...'
-                                   : task.deployStatus === 'uploading' ? 'Uploading Archive...'
-                                   : 'Deploying to Zerops...'}
-                                </span>
-                              ) : task.deployStatus === 'deployed' ? (
-                                <span className="task-decision decision-approved">
-                                  <CheckIcon size={12} style={{ marginRight: 5, verticalAlign: 'middle' }} />
-                                  Approved & Deployed
-                                </span>
-                              ) : task.deployStatus === 'failed' ? (
-                                <span className="task-decision decision-rejected" style={{ color: 'var(--amber)', display: 'inline-flex', alignItems: 'center' }}>
-                                  <AlertIcon size={12} style={{ marginRight: 5, color: 'var(--amber)' }} />
-                                  Deployment Failed
-                                </span>
-                              ) : (
-                                <span className="task-decision decision-approved">
-                                  <CheckIcon size={12} style={{ marginRight: 5, verticalAlign: 'middle' }} />
-                                  Approved
-                                </span>
-                              )}
-                            </>
-                          ) : task.approved === false ? (
-                            <span className="task-decision decision-rejected">
-                              <CrossIcon size={12} style={{ marginRight: 5, verticalAlign: 'middle' }} />
-                                Rejected
-                            </span>
-                          ) : approvingTaskId === task.id ? (
-                            <span className="task-decision decision-deploying">
-                              <SpinnerIcon size={12} strokeWidth={3} style={{ marginRight: 5 }} />
-                              Triggering Deploy...
-                            </span>
-                          ) : (
-                            <div className="task-actions-buttons">
-                              <button
-                                id={`btn-approve-${task.id}`}
-                                className="btn-success"
-                                onClick={() => onApproveTask(task.id)}
-                              >
-                                <CheckIcon size={11} style={{ marginRight: 5, verticalAlign: 'middle' }} />
-                                Approve & Deploy
-                              </button>
-                              <button
-                                id={`btn-reject-${task.id}`}
-                                className="btn-danger"
-                                onClick={() => onRejectTask(task.id)}
-                              >
-                                <CrossIcon size={11} style={{ marginRight: 5, verticalAlign: 'middle' }} />
-                                Reject
-                              </button>
-                            </div>
-                          )}
+                          <div className="task-header-right">
+                            <span className="task-id">task_{task.id.slice(-6)}</span>
+                            <TaskBadge status={task.status} />
+                          </div>
                         </div>
-                      )}
-                    </article>
-                  ))}
+
+                        {/* Diff output */}
+                        {isExpanded && (task.codeDiff || task.infraDiff) && (
+                          <DiffViewer codeDiffStr={task.codeDiff} infraDiffStr={task.infraDiff} deployStatus={task.deployStatus} />
+                        )}
+
+                        {/* Actions */}
+                        {isExpanded && task.status === 'completed' && (
+                          <div className="task-actions">
+                            <span className="task-actions-label">
+                              Created {new Date(task.createdAt).toLocaleTimeString()}
+                            </span>
+                            {task.approved === true ? (
+                              <>
+                                {task.deployStatus === 'packaging' || task.deployStatus === 'uploading' || task.deployStatus === 'deploying' ? (
+                                  <span className="task-decision decision-deploying">
+                                    <SpinnerIcon size={12} strokeWidth={3} style={{ marginRight: 5 }} />
+                                    {task.deployStatus === 'packaging' ? 'Packaging Build...'
+                                     : task.deployStatus === 'uploading' ? 'Uploading Archive...'
+                                     : 'Deploying to Zerops...'}
+                                  </span>
+                                ) : task.deployStatus === 'deployed' ? (
+                                  <span className="task-decision decision-approved">
+                                    <CheckIcon size={12} style={{ marginRight: 5, verticalAlign: 'middle' }} />
+                                    Approved & Deployed
+                                  </span>
+                                ) : task.deployStatus === 'failed' ? (
+                                  <span className="task-decision decision-rejected" style={{ color: 'var(--amber)', display: 'inline-flex', alignItems: 'center' }}>
+                                    <AlertIcon size={12} style={{ marginRight: 5, color: 'var(--amber)' }} />
+                                    Deployment Failed
+                                  </span>
+                                ) : (
+                                  <span className="task-decision decision-approved">
+                                    <CheckIcon size={12} style={{ marginRight: 5, verticalAlign: 'middle' }} />
+                                    Approved
+                                  </span>
+                                )}
+                              </>
+                            ) : task.approved === false ? (
+                              <span className="task-decision decision-rejected">
+                                <CrossIcon size={12} style={{ marginRight: 5, verticalAlign: 'middle' }} />
+                                  Rejected
+                              </span>
+                            ) : approvingTaskId === task.id ? (
+                              <span className="task-decision decision-deploying">
+                                <SpinnerIcon size={12} strokeWidth={3} style={{ marginRight: 5 }} />
+                                Triggering Deploy...
+                              </span>
+                            ) : (
+                              <div className="task-actions-buttons">
+                                <button
+                                  id={`btn-approve-${task.id}`}
+                                  className="btn-success"
+                                  onClick={(e) => {
+                                    e.stopPropagation(); // prevent collapsing on click
+                                    onApproveTask(task.id);
+                                  }}
+                                >
+                                  <CheckIcon size={11} style={{ marginRight: 5, verticalAlign: 'middle' }} />
+                                  Approve & Deploy
+                                </button>
+                                <button
+                                  id={`btn-reject-${task.id}`}
+                                  className="btn-danger"
+                                  onClick={(e) => {
+                                    e.stopPropagation(); // prevent collapsing on click
+                                    onRejectTask(task.id);
+                                  }}
+                                >
+                                  <CrossIcon size={11} style={{ marginRight: 5, verticalAlign: 'middle' }} />
+                                  Reject
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })}
                 </div>
               )}
             </div>

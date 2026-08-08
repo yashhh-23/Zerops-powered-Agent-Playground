@@ -25,7 +25,7 @@ interface SessionSidebarProps {
 
 const renderTemplateIcon = (iconName: string) => {
   if (iconName === 'react') return <ReactIcon size={14} style={{ color: 'var(--accent)' }} />;
-  if (iconName === 'python') return <PythonIcon size={14} style={{ color: 'var(--amber)' }} />;
+  if (iconName === 'python') return <PythonIcon size={14} style={{ color: '#ffde57' }} />; // Python yellow, distinct from warning amber
   return <NodeIcon size={14} style={{ color: 'var(--green)' }} />;
 };
 
