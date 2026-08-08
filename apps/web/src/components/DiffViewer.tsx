@@ -11,28 +11,86 @@ function highlightLine(line: string): { __html: string } {
   const prefix = line.charAt(0);
   const codeContent = (prefix === '+' || prefix === '-') ? line.slice(1) : line;
 
-  let html = codeContent
+  const escape = (text: string) => text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
-  // Apply basic syntax highlighting rules
-  // 1. Strings
-  html = html.replace(/(["'])(.*?)\1/g, '<span class="hl-string">$1$2$1</span>');
-  // 2. Numbers
-  html = html.replace(/\b(\d+)\b/g, '<span class="hl-number">$1</span>');
-  // 3. Comments
-  html = html.replace(/(\/\/.*|#.*)/g, '<span class="hl-comment">$1</span>');
-  // 4. Keywords
-  const keywords = /\b(const|let|var|function|return|import|from|export|default|class|if|else|for|while|async|await|def|print|try|except|as|true|false|null|undefined|app|version|deploy|zcp|yaml|ports)\b/g;
-  html = html.replace(keywords, '<span class="hl-keyword">$1</span>');
-  // 5. Functions
-  html = html.replace(/\b(\w+)(?=\()/g, '<span class="hl-function">$1</span>');
+  let result = '';
+  let i = 0;
+  const len = codeContent.length;
 
-  // Wrap with prefix token if there is one
-  const prefixHtml = prefix ? `<span class="diff-sign">${prefix}</span>` : '<span class="diff-sign"> </span>';
-  return { __html: prefixHtml + html };
+  const keywords = new Set([
+    'const', 'let', 'var', 'function', 'return', 'import', 'from', 'export', 
+    'default', 'class', 'if', 'else', 'for', 'while', 'async', 'await', 
+    'def', 'print', 'try', 'except', 'as', 'true', 'false', 'null', 
+    'undefined', 'app', 'version', 'deploy', 'zcp', 'yaml', 'ports'
+  ]);
+
+  while (i < len) {
+    const char = codeContent[i];
+
+    // 1. Comments
+    if (char === '#' || (char === '/' && codeContent[i + 1] === '/')) {
+      result += `<span class="hl-comment">${escape(codeContent.slice(i))}</span>`;
+      break;
+    }
+
+    // 2. Strings
+    if (char === '"' || char === "'") {
+      const quote = char;
+      let start = i;
+      i++;
+      while (i < len && codeContent[i] !== quote) {
+        if (codeContent[i] === '\\') i++; // skip escaped char
+        i++;
+      }
+      if (i < len) i++; // include closing quote
+      const strVal = codeContent.slice(start, i);
+      result += `<span class="hl-string">${escape(strVal)}</span>`;
+      continue;
+    }
+
+    // 3. Numbers
+    if (/\d/.test(char) && (i === 0 || !/[a-zA-Z0-9_]/.test(codeContent[i - 1]))) {
+      let start = i;
+      while (i < len && /\d/.test(codeContent[i])) {
+        i++;
+      }
+      result += `<span class="hl-number">${escape(codeContent.slice(start, i))}</span>`;
+      continue;
+    }
+
+    // 4. Words (Keywords or Functions or Identifiers)
+    if (/[a-zA-Z_]/.test(char)) {
+      let start = i;
+      while (i < len && /[a-zA-Z0-9_]/.test(codeContent[i])) {
+        i++;
+      }
+      const word = codeContent.slice(start, i);
+      
+      if (keywords.has(word)) {
+        result += `<span class="hl-keyword">${word}</span>`;
+      } else if (i < len && codeContent[i] === '(') {
+        result += `<span class="hl-function">${word}</span>`;
+      } else {
+        result += escape(word);
+      }
+      continue;
+    }
+
+    // 5. Operators, whitespace, punctuation
+    result += escape(char);
+    i++;
+  }
+
+  const prefixHtml = prefix === '+' ? '<span class="diff-sign">+</span>'
+                   : prefix === '-' ? '<span class="diff-sign">-</span>'
+                   : '<span class="diff-sign"> </span>';
+
+  return { __html: prefixHtml + result };
 }
+
 
 export function DiffViewer({ codeDiffStr, infraDiffStr, deployStatus }: DiffViewerProps) {
   const [collapsedFiles, setCollapsedFiles] = useState<Record<string, boolean>>({});
@@ -135,6 +193,12 @@ export function DiffViewer({ codeDiffStr, infraDiffStr, deployStatus }: DiffView
     );
   };
 
+  const getActionLabel = (act: string) => {
+    if (act === 'create') return 'ADDED';
+    if (act === 'delete') return 'DELETED';
+    return 'MODIFIED';
+  };
+
   return (
     <div className="diff-viewer-wrapper">
       {/* 4-Step Deploy Progress Indicators */}
@@ -165,7 +229,7 @@ export function DiffViewer({ codeDiffStr, infraDiffStr, deployStatus }: DiffView
                   {file.path}
                 </span>
                 <span className={`diff-action-tag ${actionClass(file.action || 'update')}`}>
-                  {file.action || 'update'}
+                  {getActionLabel(file.action || 'update')}
                 </span>
               </div>
               
