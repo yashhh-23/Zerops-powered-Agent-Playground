@@ -38,6 +38,7 @@ export default function App() {
 
   const [newTemplate, setNewTemplate] = useState('node-api-basic');
   const [previewTab, setPreviewTab] = useState<'health.ts' | 'zerops.yaml'>('health.ts');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const { isConnected, connectionError, dbHealth: sseDbHealth } = useSessionSSE({
     sessionId: activeSessionId,
@@ -46,10 +47,37 @@ export default function App() {
     fetchSessionDetails,
   });
 
+  const handleSelectSession = (id: string) => {
+    setActiveSessionId(id);
+    setSidebarOpen(false);
+  };
+
   return (
     <>
       {/* Skip to Main Content Link for Accessibility */}
       <a href="#main-content" className="skip-link">Skip to main content</a>
+
+      {/* Mobile Top Navigation Header */}
+      <header className="mobile-header">
+        <button
+          className="hamburger-btn"
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          aria-label="Toggle navigation menu"
+          aria-expanded={sidebarOpen}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
+        <span className="mobile-title">ZEROPS AGENT PLAYGROUND</span>
+      </header>
+
+      {/* Overlay backdrop to dismiss sidebar on click */}
+      {sidebarOpen && (
+        <div className="sidebar-overlay-backdrop" onClick={() => setSidebarOpen(false)} aria-hidden="true" />
+      )}
 
       {/* Full-width error banner outside layout */}
       {error && (
@@ -65,15 +93,21 @@ export default function App() {
         </div>
       )}
 
-      <div className="layout">
+      <div className={`layout ${sidebarOpen ? 'sidebar-open' : ''}`}>
         <SessionSidebar 
           sessions={sessions}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           activeSessionId={activeSessionId}
-          onSelectSession={setActiveSessionId}
-          onCreateSession={createSession}
-          onImportSession={importSession}
+          onSelectSession={handleSelectSession}
+          onCreateSession={async (name, temp) => {
+            await createSession(name, temp);
+            setSidebarOpen(false);
+          }}
+          onImportSession={async (key) => {
+            await importSession(key);
+            setSidebarOpen(false);
+          }}
           apiHealth={isConnected ? { status: 'ok' } : apiHealth}
           dbHealth={activeSessionId && isConnected ? { status: sseDbHealth } : dbHealth}
           loadingHealth={loadingHealth}
@@ -217,8 +251,11 @@ export default function App() {
             </div>
           ) : loadingDetails && !activeSession ? (
             <div className="center-loader">
-              <SpinnerIcon size={18} />
-              Loading playground…
+              <div className="center-loader-label">
+                <SpinnerIcon size={20} />
+              </div>
+              <span>Loading playground…</span>
+              <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Fetching session details and task history</span>
             </div>
           ) : activeSession ? (
             <PlaygroundPanel 

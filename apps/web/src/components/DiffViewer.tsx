@@ -8,8 +8,6 @@ interface DiffViewerProps {
   deployStatus?: string | null;
 }
 
-// ─── Multi-language keyword sets ─────────────────────────────────────────────
-
 const KEYWORDS: Record<string, Set<string>> = {
   js: new Set([
     'const','let','var','function','return','import','from','export','default',
@@ -83,8 +81,6 @@ function detectLang(filePath?: string): keyof typeof KEYWORDS {
   return LANG_BY_EXT[ext] ?? 'js';
 }
 
-// ─── Per-line tokenizer ──────────────────────────────────────────────────────
-
 function highlightLine(line: string, lang: keyof typeof KEYWORDS = 'js'): { __html: string } {
   const prefix = line.charAt(0);
   const codeContent = (prefix === '+' || prefix === '-') ? line.slice(1) : line;
@@ -100,7 +96,6 @@ function highlightLine(line: string, lang: keyof typeof KEYWORDS = 'js'): { __ht
   while (i < len) {
     const char = codeContent[i];
 
-    // 1. Block comments /* … */
     if (char === '/' && codeContent[i + 1] === '*') {
       const end = codeContent.indexOf('*/', i + 2);
       const comment = end === -1 ? codeContent.slice(i) : codeContent.slice(i, end + 2);
@@ -109,27 +104,24 @@ function highlightLine(line: string, lang: keyof typeof KEYWORDS = 'js'): { __ht
       continue;
     }
 
-    // 2. Line comments // or #
     if ((char === '/' && codeContent[i + 1] === '/') || char === '#') {
       result += `<span class="hl-comment">${escape(codeContent.slice(i))}</span>`;
       break;
     }
 
-    // 3. Strings (single, double, backtick)
     if (char === '"' || char === "'" || char === '`') {
       const quote = char;
       const start = i;
       i++;
       while (i < len && codeContent[i] !== quote) {
-        if (codeContent[i] === '\\') i++; // skip escaped char
+        if (codeContent[i] === '\\') i++;
         i++;
       }
-      if (i < len) i++; // include closing quote
+      if (i < len) i++;
       result += `<span class="hl-string">${escape(codeContent.slice(start, i))}</span>`;
       continue;
     }
 
-    // 4. Numbers (dec, hex, float, suffixed like 42u64, 0xFF)
     if (/\d/.test(char) && (i === 0 || !/[a-zA-Z0-9_]/.test(codeContent[i - 1]))) {
       const start = i;
       while (i < len && /[\d._xXa-fA-FoObBlL]/.test(codeContent[i])) i++;
@@ -137,7 +129,6 @@ function highlightLine(line: string, lang: keyof typeof KEYWORDS = 'js'): { __ht
       continue;
     }
 
-    // 5. Words: keywords / types / function calls / identifiers
     if (/[a-zA-Z_]/.test(char)) {
       const start = i;
       while (i < len && /[a-zA-Z0-9_]/.test(codeContent[i])) i++;
@@ -148,7 +139,6 @@ function highlightLine(line: string, lang: keyof typeof KEYWORDS = 'js'): { __ht
       } else if (i < len && codeContent[i] === '(') {
         result += `<span class="hl-function">${word}</span>`;
       } else if (/^[A-Z]/.test(word)) {
-        // Capitalised → type-like in most languages
         result += `<span class="hl-type">${word}</span>`;
       } else {
         result += escape(word);
@@ -156,7 +146,6 @@ function highlightLine(line: string, lang: keyof typeof KEYWORDS = 'js'): { __ht
       continue;
     }
 
-    // 6. Everything else
     result += escape(char);
     i++;
   }
@@ -169,30 +158,33 @@ function highlightLine(line: string, lang: keyof typeof KEYWORDS = 'js'): { __ht
   return { __html: prefixHtml + result };
 }
 
-// ─── Component ───────────────────────────────────────────────────────────────
-
 export interface DiffLineProps {
   line: string;
   lang?: string;
+  lineNum?: number;
   className?: string;
 }
 
-export function DiffLine({ line, lang = 'js', className = '' }: DiffLineProps) {
+export function DiffLine({ line, lang = 'js', lineNum, className = '' }: DiffLineProps) {
   const prefix = line.charAt(0);
   const cls = prefix === '+' ? 'diff-line-add'
             : prefix === '-' ? 'diff-line-del'
             : 'diff-line-ctx';
   return (
-    <span
-      className={`${cls} ${className}`}
-      dangerouslySetInnerHTML={highlightLine(line, lang)}
-    />
+    <div className={`diff-line-container ${cls} ${className}`}>
+      <span className="diff-line-num">{lineNum ?? ''}</span>
+      <span
+        className="diff-line-content"
+        dangerouslySetInnerHTML={highlightLine(line, lang)}
+      />
+    </div>
   );
 }
 
 export function DiffViewer({ codeDiffStr, infraDiffStr, deployStatus }: DiffViewerProps) {
   const [collapsedFiles, setCollapsedFiles] = useState<Record<string, boolean>>({});
   const [infraCollapsed, setInfraCollapsed] = useState(false);
+  const [copiedFile, setCopiedFile] = useState<string | null>(null);
 
   let codeDiff: CodeDiffPayload | null = null;
   let codeParseError: string | null = null;
@@ -226,7 +218,13 @@ export function DiffViewer({ codeDiffStr, infraDiffStr, deployStatus }: DiffView
     setCollapsedFiles(prev => ({ ...prev, [path]: !prev[path] }));
   };
 
-  // ── Deploy progress bar ──────────────────────────────────────────────────
+  const handleCopyCode = (e: React.MouseEvent, path: string, content: string) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(content);
+    setCopiedFile(path);
+    setTimeout(() => setCopiedFile(null), 2000);
+  };
+
   const renderDeployProgress = () => {
     if (!deployStatus || deployStatus === 'pending') return null;
 
@@ -240,6 +238,15 @@ export function DiffViewer({ codeDiffStr, infraDiffStr, deployStatus }: DiffView
     const ORDER = ['packaging', 'uploading', 'deploying', 'deployed'];
 
     const getStepStatus = (stepId: string) => {
+      if (deployStatus && deployStatus.startsWith('failed-')) {
+        const failedStep = deployStatus.replace('failed-', '');
+        const failedAt = ORDER.indexOf(failedStep);
+        const stepIdx = ORDER.indexOf(stepId);
+        if (stepIdx < failedAt) return 'done';
+        if (stepIdx === failedAt) return 'failed';
+        return 'pending';
+      }
+
       if (deployStatus === 'failed') {
         const failedAt = ORDER.indexOf('deploying');
         const stepIdx = ORDER.indexOf(stepId);
@@ -247,6 +254,7 @@ export function DiffViewer({ codeDiffStr, infraDiffStr, deployStatus }: DiffView
         if (stepIdx === failedAt) return 'failed';
         return 'pending';
       }
+      
       const currentIdx = ORDER.indexOf(deployStatus);
       const stepIdx = ORDER.indexOf(stepId);
       if (stepIdx < currentIdx) return 'done';
@@ -258,7 +266,7 @@ export function DiffViewer({ codeDiffStr, infraDiffStr, deployStatus }: DiffView
       <div className="deploy-progress-container">
         <div className="deploy-progress-header">
           <span>Infrastructure Pipeline Status</span>
-          {deployStatus === 'failed' ? (
+          {deployStatus === 'failed' || deployStatus?.startsWith('failed-') ? (
             <span className="pipeline-status-badge pipeline-failed">Failed</span>
           ) : deployStatus === 'deployed' ? (
             <span className="pipeline-status-badge pipeline-done">Success</span>
@@ -329,15 +337,27 @@ export function DiffViewer({ codeDiffStr, infraDiffStr, deployStatus }: DiffView
                     <span className="diff-lang-badge">{lang}</span>
                   )}
                 </span>
-                <span className={`diff-action-tag ${actionClass(file.action || 'update')}`}>
-                  {getActionLabel(file.action || 'update')}
-                </span>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {file.diff && (
+                    <button
+                      className={`copy-code-btn ${copiedFile === file.path ? 'copied' : ''}`}
+                      onClick={(e) => handleCopyCode(e, file.path, file.diff || '')}
+                      title="Copy raw diff content"
+                    >
+                      {copiedFile === file.path ? 'COPIED' : 'COPY'}
+                    </button>
+                  )}
+                  <span className={`diff-action-tag ${actionClass(file.action || 'update')}`}>
+                    {getActionLabel(file.action || 'update')}
+                  </span>
+                </div>
               </div>
 
               {!isCollapsed && (
                 <pre className="diff-code">
                   {file.diff?.split('\n').map((line, li) => (
-                    <DiffLine key={li} line={line} lang={lang} />
+                    <DiffLine key={li} line={line} lang={lang} lineNum={li + 1} />
                   ))}
                 </pre>
               )}
@@ -364,15 +384,27 @@ export function DiffViewer({ codeDiffStr, infraDiffStr, deployStatus }: DiffView
                 </svg>
                 zerops.yaml — Infrastructure Config
               </span>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  className={`copy-code-btn ${copiedFile === 'zerops.yaml' ? 'copied' : ''}`}
+                  onClick={(e) => handleCopyCode(e, 'zerops.yaml', infraDiff?.zeropsYaml || '')}
+                  title="Copy zerops.yaml config"
+                >
+                  {copiedFile === 'zerops.yaml' ? 'COPIED' : 'COPY'}
+                </button>
+              </div>
             </div>
             {!infraCollapsed && (
               <pre className="infra-code">
                 {infraDiff.zeropsYaml.split('\n').map((line, li) => (
-                  <span
-                    key={li}
-                    className="infra-line"
-                    dangerouslySetInnerHTML={highlightLine(line, 'yaml')}
-                  />
+                  <div key={li} className="infra-line-container">
+                    <span className="infra-line-num">{li + 1}</span>
+                    <span
+                      className="infra-line-content"
+                      dangerouslySetInnerHTML={highlightLine(line, 'yaml')}
+                    />
+                  </div>
                 ))}
               </pre>
             )}

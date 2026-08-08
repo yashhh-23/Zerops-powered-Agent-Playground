@@ -91,79 +91,95 @@ export function SessionSidebar({
       </div>
 
       <div className="sidebar-body">
-        {/* System Status */}
+        {/* System Status Bento Grid */}
         <section className="sidebar-section" aria-labelledby="status-heading">
           <div className="section-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span id="status-heading">System Status</span>
+            <span id="status-heading">Metrics &amp; Status</span>
             <button className="health-refresh-btn" onClick={refreshHealth} title="Refresh health status" aria-label="Refresh health status" id="btn-refresh-health">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={loadingHealth ? 'spinning' : ''}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={loadingHealth ? 'spinning' : ''}>
                 <path d="M23 4v6h-6"/>
                 <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
               </svg>
             </button>
           </div>
-          <div className="health-grid">
-            <div className="health-row">
-              <span className="health-label">API Server</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div className="bento-grid">
+            <div className="bento-card bento-api">
+              <span className="bento-label">API SERVER</span>
+              <div className="bento-value-row">
                 <span className={`pulse-dot ${apiHealth?.status === 'ok' ? 'pulse-green' : 'pulse-red'}`} />
-                <span className="health-val">{apiHealth?.status === 'ok' ? 'Online' : 'Offline'}</span>
+                <span className="bento-val">{apiHealth?.status === 'ok' ? 'ONLINE' : 'OFFLINE'}</span>
               </div>
             </div>
-            <div className="health-row">
-              <span className="health-label">Database</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            
+            <div className="bento-card bento-db">
+              <span className="bento-label">DATABASE</span>
+              <div className="bento-value-row">
                 <span className={`pulse-dot ${dbHealth?.status === 'ok' ? 'pulse-green' : dbHealth?.status === 'error' ? 'pulse-red' : 'pulse-amber'}`} />
-                <span className="health-val">{dbHealth?.status === 'ok' ? 'Connected' : dbHealth?.status === 'error' ? 'Down' : 'Connecting...'}</span>
+                <span className="bento-val">{dbHealth?.status === 'ok' ? 'LIVE' : dbHealth?.status === 'error' ? 'DOWN' : 'SYNC'}</span>
               </div>
+            </div>
+
+            <div className="bento-card bento-stat">
+              <span className="bento-label">SESSIONS</span>
+              <span className="bento-number">{sessions.length}</span>
+            </div>
+
+            <div className="bento-card bento-host">
+              <span className="bento-label">HOST</span>
+              <span className="bento-tag">ZEROPS</span>
             </div>
           </div>
         </section>
 
         <div className="sidebar-divider" />
 
-        {/* New Session */}
+         {/* New Session */}
         <section className="sidebar-section" aria-labelledby="new-playground-heading">
           <span id="new-playground-heading" className="section-label">New Playground</span>
           <form className="create-form" onSubmit={handleSubmit} id="form-create-session">
-            <label htmlFor="input-session-name" className="visually-hidden">Playground Session Name</label>
-            <input
-              id="input-session-name"
-              className="field-input session-name-input"
-              type="text"
-              placeholder="Session name…"
-              value={newName}
-              onChange={e => setNewName(e.target.value)}
-              disabled={isCreatingSession}
-              required
-            />
+            <div className="field-group">
+              <label htmlFor="input-session-name" className="field-label">PLAYGROUND NAME</label>
+              <input
+                id="input-session-name"
+                className="field-input session-name-input"
+                type="text"
+                placeholder="e.g. auth-sandbox"
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                disabled={isCreatingSession}
+                required
+              />
+              <span className="field-helper">Name of your sandboxed deployment.</span>
+            </div>
             
-            <span className="field-help-label">Select Stack Template</span>
-            <div className="template-cards">
-              {TEMPLATE_OPTIONS.map((opt) => (
-                <div
-                  key={opt.key}
-                  className={`template-card ${newTemplate === opt.key ? 'selected' : ''}`}
-                  onClick={() => !isCreatingSession && setNewTemplate(opt.key)}
-                  role="radio"
-                  aria-checked={newTemplate === opt.key}
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      if (!isCreatingSession) setNewTemplate(opt.key);
-                    }
-                  }}
-                >
-                  <div className="template-card-header">
-                    <span className="template-icon" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                      {renderTemplateIcon(opt.icon)}
-                    </span>
-                    <span className="template-card-title">{opt.title}</span>
+            <div className="field-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span className="field-label">SELECT STACK TEMPLATE</span>
+              <div className="template-cards">
+                {TEMPLATE_OPTIONS.map((opt) => (
+                  <div
+                    key={opt.key}
+                    className={`template-card ${newTemplate === opt.key ? 'selected' : ''}`}
+                    onClick={() => !isCreatingSession && setNewTemplate(opt.key)}
+                    role="radio"
+                    aria-checked={newTemplate === opt.key}
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        if (!isCreatingSession) setNewTemplate(opt.key);
+                      }
+                    }}
+                  >
+                    <div className="template-card-header">
+                      <span className="template-icon" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                        {renderTemplateIcon(opt.icon)}
+                      </span>
+                      <span className="template-card-title">{opt.title}</span>
+                    </div>
+                    <p className="template-card-desc">{opt.desc}</p>
                   </div>
-                  <p className="template-card-desc">{opt.desc}</p>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
             
             <button id="btn-create-session" type="submit" className="btn-primary" disabled={isCreatingSession || !newName.trim()}>
@@ -176,17 +192,20 @@ export function SessionSidebar({
         <section className="sidebar-section" aria-labelledby="import-playground-heading">
           <span id="import-playground-heading" className="section-label">Import Session</span>
           <form className="create-form" onSubmit={handleImportSubmit} id="form-import-session">
-            <label htmlFor="input-import-key" className="visually-hidden">Session API Key</label>
-            <input
-              id="input-import-key"
-              className="field-input"
-              type="text"
-              placeholder="Paste API key here…"
-              value={importKey}
-              onChange={e => setImportKey(e.target.value)}
-              disabled={isImporting}
-              required
-            />
+            <div className="field-group">
+              <label htmlFor="input-import-key" className="field-label">SESSION API KEY</label>
+              <input
+                id="input-import-key"
+                className="field-input"
+                type="text"
+                placeholder="Paste session API key…"
+                value={importKey}
+                onChange={e => setImportKey(e.target.value)}
+                disabled={isImporting}
+                required
+              />
+              <span className="field-helper">Restore a sandbox using its key.</span>
+            </div>
             <button id="btn-import-session" type="submit" className="btn-primary" disabled={isImporting || !importKey.trim()}>
               {isImporting ? 'Importing...' : 'Import Session'}
             </button>
@@ -249,7 +268,11 @@ export function SessionSidebar({
             });
 
           return loadingSessions ? (
-            <div className="empty-text">Loading…</div>
+            <div className="skeleton-list" aria-label="Loading playgrounds" role="status">
+              <div className="skeleton-item" />
+              <div className="skeleton-item" />
+              <div className="skeleton-item" />
+            </div>
           ) : sorted.length === 0 ? (
             <div className="empty-text">{searchQuery ? 'No matching playgrounds found.' : 'No sessions yet.'}</div>
           ) : (

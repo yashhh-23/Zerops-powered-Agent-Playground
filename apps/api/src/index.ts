@@ -418,16 +418,24 @@ fastify.post('/api/tasks/:id/approve', {
     where: { id },
     data: { 
       approved: true,
-      deployStatus: 'deploying'
+      deployStatus: 'packaging'
     },
   });
 
   // Await deployment and persist result
   deployToZerops(task.sessionId, updatedTask)
     .then(async (success) => {
+      const currentTask = await prisma.agentTask.findUnique({ where: { id } });
+      const statusToSet = success 
+        ? 'deployed' 
+        : (currentTask?.deployStatus?.startsWith('failed-') ? currentTask.deployStatus : 'failed');
+      
       await prisma.agentTask.update({
         where: { id },
-        data: { deployStatus: success ? 'deployed' : 'failed', deployError: success ? null : 'Deployment process failed' },
+        data: { 
+          deployStatus: statusToSet, 
+          deployError: success ? null : (currentTask?.deployError || 'Deployment process failed') 
+        },
       });
       // Force trigger session updatedAt to update SSE listeners
       await prisma.playgroundSession.update({
@@ -438,9 +446,12 @@ fastify.post('/api/tasks/:id/approve', {
     })
     .catch(async (err: any) => {
       console.error(`[Zerops] Deployment failed for task ${id}:`, err);
+      const currentTask = await prisma.agentTask.findUnique({ where: { id } });
+      const statusToSet = currentTask?.deployStatus?.startsWith('failed-') ? currentTask.deployStatus : 'failed';
+      
       await prisma.agentTask.update({
         where: { id },
-        data: { deployStatus: 'failed', deployError: err.message },
+        data: { deployStatus: statusToSet, deployError: err.message },
       });
       await prisma.playgroundSession.update({
         where: { id: task.sessionId },

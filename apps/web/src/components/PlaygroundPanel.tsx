@@ -185,7 +185,7 @@ export function PlaygroundPanel({
         <ConnectionStatus isConnected={isConnected} error={connectionError} />
       </div>
 
-      <div className="pg-grid">
+      <div className="pg-workspace">
         {/* Left panel: Prompt input */}
         <div className="pg-panel pg-left">
           <section aria-labelledby="prompt-heading" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -206,7 +206,7 @@ export function PlaygroundPanel({
                   <label htmlFor="textarea-prompt" className="visually-hidden">Prompt instructions for the agent</label>
                   <textarea
                     id="textarea-prompt"
-                    className="prompt-textarea"
+                    className={`prompt-textarea${runningTask ? ' thinking' : ''}`}
                     placeholder={`e.g. "${PLACEHOLDERS[placeholderIndex]}"`}
                     value={taskPrompt}
                     onChange={e => setTaskPrompt(e.target.value)}
@@ -248,7 +248,7 @@ export function PlaygroundPanel({
                       {runningTask ? (
                         <>
                           <SpinnerIcon size={10} style={{ marginRight: 5 }} />
-                          Running Agent...
+                          Analyzing task…
                         </>
                       ) : (
                         <>
@@ -262,6 +262,41 @@ export function PlaygroundPanel({
                   </div>
                 </div>
               </form>
+
+              {/* Technical Specifications Spec Sheet - Contrast Warm Cream Background */}
+              <div className="spec-sheet" aria-label="Technical sandbox specifications">
+                <div className="spec-sheet-header">
+                  <span className="spec-sheet-title">SYSTEM SPECIFICATION SHEET</span>
+                  <span className="spec-sheet-serial">SN: {session.id.slice(0, 8).toUpperCase()}</span>
+                </div>
+                
+                <div className="spec-sheet-grid">
+                  <div className="spec-item">
+                    <span className="spec-label">RUNTIME COMPILER</span>
+                    <span className="spec-value">
+                      {session.template === 'python-api-basic' ? 'Python 3.11 (uvicorn)' : 'Node.js v20.20 (V8)'}
+                    </span>
+                  </div>
+                  <div className="spec-item">
+                    <span className="spec-label">TARGET INGRESS PORT</span>
+                    <span className="spec-value">
+                      {session.template === 'react-static-basic' ? 'PORT: 3000 (HTTP)' : session.template === 'python-api-basic' ? 'PORT: 8000 (FastAPI)' : 'PORT: 8080 (Fastify)'}
+                    </span>
+                  </div>
+                  <div className="spec-item">
+                    <span className="spec-label">DB CONNECTIONS</span>
+                    <span className="spec-value">Prisma ORM (PostgreSQL)</span>
+                  </div>
+                  <div className="spec-item">
+                    <span className="spec-label">ORCHESTRATOR</span>
+                    <span className="spec-value">Zerops Container Engine</span>
+                  </div>
+                </div>
+
+                <div className="spec-sheet-footer">
+                  <span className="spec-stamp">VERIFIED ENVIRONMENT // SECURE SANDBOX</span>
+                </div>
+              </div>
             </div>
           </section>
         </div>
@@ -280,8 +315,22 @@ export function PlaygroundPanel({
             <div className="panel-body pg-tasks-container">
               {!session.agentTasks || session.agentTasks.length === 0 ? (
                 <div className="empty-tasks">
-                  <strong>No tasks generated yet</strong>
-                  <p>Submit a prompt on the left to start the agent pipeline.</p>
+                  <div className="empty-tasks-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <polyline points="4 17 10 11 4 5"/>
+                      <line x1="12" y1="19" x2="20" y2="19"/>
+                    </svg>
+                  </div>
+                  <p className="empty-tasks-title">Agent standing by</p>
+                  <p className="empty-tasks-desc">
+                    Type a prompt on the left and hit <strong>Execute</strong>. The agent will analyze your request, propose code changes, and generate deployment diffs.
+                  </p>
+                  <div className="empty-tasks-steps">
+                    <span className="empty-tasks-step">Analyzing task &amp; scaffolding context</span>
+                    <span className="empty-tasks-step">Running agent &amp; generating diffs</span>
+                    <span className="empty-tasks-step">Awaiting your approve or reject</span>
+                    <span className="empty-tasks-step">Auto-deploying to live Zerops</span>
+                  </div>
                 </div>
               ) : (
                 <div className="task-list" id="task-list" role="feed" aria-label="Task timeline stream">

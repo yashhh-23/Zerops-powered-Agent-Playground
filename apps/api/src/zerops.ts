@@ -118,8 +118,8 @@ export async function applyInfraDiff(
 ): Promise<boolean> {
   const apiToken = process.env.ZEROPS_API_TOKEN;
 
-  if (!apiToken || apiToken.startsWith('zerops_placeholder')) {
-    console.warn('[Zerops] ZEROPS_API_TOKEN is missing. Simulating successful deployment pipeline.');
+  if (!apiToken || apiToken.startsWith('zerops_placeholder') || projectId.startsWith('stub-')) {
+    console.warn('[Zerops] ZEROPS_API_TOKEN is missing or stub project ID is used. Simulating successful deployment pipeline.');
     if (onProgress) {
       await onProgress('packaging');
       await new Promise(resolve => setTimeout(resolve, 800));
@@ -329,11 +329,13 @@ export async function deployToZerops(sessionId: string, task: any): Promise<bool
   });
 
   if (task.infraDiff) {
+    let currentStep: 'packaging' | 'uploading' | 'deploying' = 'packaging';
     try {
       const infraDiff = JSON.parse(task.infraDiff);
       console.log(`[Zerops Integration] Applying infra diff for project: ${projectId}`);
       
       const onProgress = async (step: 'packaging' | 'uploading' | 'deploying') => {
+        currentStep = step;
         await prisma.agentTask.update({
           where: { id: task.id },
           data: { deployStatus: step }
@@ -350,10 +352,18 @@ export async function deployToZerops(sessionId: string, task: any): Promise<bool
         return true;
       } else {
         console.error(`[Zerops Integration] Deployment pipeline execution failed for task ${task.id}`);
+        await prisma.agentTask.update({
+          where: { id: task.id },
+          data: { deployStatus: `failed-${currentStep}`, deployError: 'Deployment process failed' }
+        });
         return false;
       }
     } catch (err: any) {
       console.error(`[Zerops Integration] Failed to parse/apply infra diff for task ${task.id}:`, err.message);
+      await prisma.agentTask.update({
+        where: { id: task.id },
+        data: { deployStatus: `failed-${currentStep}`, deployError: err.message }
+      });
       throw err;
     }
   } else {
