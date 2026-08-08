@@ -1,0 +1,65 @@
+# Zerops Service Definitions
+# Managed services (db, nats) are provisioned through Zerops project import or dashboard:
+# - db: Managed PostgreSQL (OLTP)
+# - nats: NATS message queue
+
+zerops:
+  # Frontend service
+  - setup: web
+    build:
+      os: ubuntu
+      base: nodejs@20
+      buildCommands:
+        - npm install
+        - npm run build:web
+      deployFiles:
+        - apps/web/dist
+        - apps/web/package.json
+        - package.json
+        - package-lock.json
+        - node_modules
+        - packages
+    run:
+      os: ubuntu
+      base: nodejs@20
+      ports:
+        - port: 3000
+          httpSupport: true
+      # Serve built React app on port 3000
+      start: npm run preview --workspace=apps/web -- --port 3000 --host 0.0.0.0
+
+  # API service
+  - setup: api
+    build:
+      os: ubuntu
+      base: nodejs@20
+      buildCommands:
+        - npm install
+        - npx prisma generate --schema=packages/db/schema.prisma
+        - npm run build:db
+        - npm run build:api
+        - npm run build:web
+      deployFiles:
+        - apps/api/dist
+        - apps/api/package.json
+        - apps/web/dist
+        - apps/web/package.json
+        - package.json
+        - package-lock.json
+        - node_modules
+        - packages
+    run:
+      os: ubuntu
+      base: nodejs@20
+      ports:
+        - port: 8080
+          httpSupport: true
+        - port: 3000
+          httpSupport: true
+      # Start Fastify and Vite preview concurrently
+      start: env | grep -E "connectionString|db|DATABASE|POSTGRES" || true; npm run start:all
+      envVariables:
+        # ⚠️ SECRETS SHOULD NOT BE HARDCODED IN THIS FILE ⚠️
+        # Please set the DATABASE_URL environment variable securely in your Zerops Project Dashboard:
+        # Go to your 'api' service -> Environment Variables -> Add new variable
+        DATABASE_URL: ${DATABASE_URL}
