@@ -20,6 +20,7 @@ import { registerErrorHandler } from './error-handler';
 import {
   CreateSessionSchema,
   SessionParamsSchema,
+  BatchSessionSchema,
   SessionTasksParamsSchema,
   CreateTaskSchema,
   TaskParamsSchema,
@@ -172,6 +173,37 @@ fastify.get('/api/sessions', {
       createdAt: 'desc',
     },
   });
+  return sessions;
+});
+
+// Batch fetch session details with authentication check (POST because of request body)
+fastify.post('/api/sessions/batch', {
+  config: {
+    rateLimit: {
+      max: 30,
+      timeWindow: '1 minute',
+    },
+  },
+  schema: {
+    body: BatchSessionSchema,
+  },
+}, async (request: FastifyRequest, reply: FastifyReply) => {
+  const { requests } = request.body as { requests: { id: string; apiKey: string }[] };
+  if (!Array.isArray(requests) || requests.length === 0) {
+    return [];
+  }
+
+  const sessions = await prisma.playgroundSession.findMany({
+    where: {
+      OR: requests.map(r => ({ id: r.id, apiKey: r.apiKey }))
+    },
+    include: {
+      agentTasks: {
+        orderBy: { createdAt: 'asc' }
+      }
+    }
+  });
+
   return sessions;
 });
 

@@ -92,25 +92,36 @@ export function useSessions() {
     try {
       const localSessions = readLocalSessions();
       
-      const updatedSessions = await Promise.all(
-        localSessions.map(async (s) => {
-          // Optimization: Skip fetching finished sessions, preventing N+1 network requests
-          if (s.status === 'completed' || s.status === 'failed') {
-            return s;
-          }
-          try {
-            const r = await safeFetch(`${API}/api/sessions/${s.id}`, {
-              headers: { 'X-API-Key': (s as any).apiKey || '' }
-            });
-            return await r.json();
-          } catch {
-            return s;
-          }
-        })
-      );
+      const activeSessions = localSessions.filter(s => s.status === 'active');
       
-      setSessions(updatedSessions);
-      localStorage.setItem('playground_sessions', JSON.stringify(updatedSessions));
+      let updatedActiveSessions: PlaygroundSession[] = [];
+      if (activeSessions.length > 0) {
+        const payload = {
+          requests: activeSessions.map(s => ({
+            id: s.id,
+            apiKey: (s as any).apiKey || ''
+          }))
+        };
+        const r = await safeFetch(`${API}/api/sessions/batch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        updatedActiveSessions = await r.json();
+      }
+      
+      const updatedActiveMap = new Map(updatedActiveSessions.map(s => [s.id, s]));
+      const finalSessions = localSessions.map(s => {
+        if (s.status !== 'active') return s;
+        const updated = updatedActiveMap.get(s.id);
+        if (updated) {
+          return { ...updated, apiKey: (s as any).apiKey };
+        }
+        return s;
+      });
+      
+      setSessions(finalSessions);
+      localStorage.setItem('playground_sessions', JSON.stringify(finalSessions));
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -134,8 +145,8 @@ export function useSessions() {
       localSessions.unshift(s);
       localStorage.setItem('playground_sessions', JSON.stringify(localSessions));
 
-      // Direct state update avoids N+1 queries during creation
-      setSessions(localSessions);
+      // Direct prepend state update
+      setSessions(prev => [s, ...prev]);
       setActiveSessionId(s.id);
     } catch (e: any) {
       setError(e.message);
@@ -164,8 +175,8 @@ export function useSessions() {
       if (!localSessions.some((s: any) => s.id === sessionWithKey.id)) {
         localSessions.unshift(sessionWithKey);
         localStorage.setItem('playground_sessions', JSON.stringify(localSessions));
-        // Direct state update avoids N+1 queries during imports
-        setSessions(localSessions);
+        // Direct prepend state update
+        setSessions(prev => [sessionWithKey, ...prev]);
       }
 
       setActiveSessionId(sessionWithKey.id);

@@ -21,7 +21,8 @@ export function registerAuth(fastify: FastifyInstance) {
     if (
       url === '/health' ||
       url === '/api/health/db' ||
-      (url === '/api/sessions' && method === 'POST')
+      (url === '/api/sessions' && method === 'POST') ||
+      (url === '/api/sessions/batch' && method === 'POST')
     ) {
       return;
     }

@@ -20,6 +20,15 @@ export const SessionParamsSchema = Type.Object({
   }),
 });
 
+export const BatchSessionSchema = Type.Object({
+  requests: Type.Array(
+    Type.Object({
+      id: Type.String({ description: 'Session ID' }),
+      apiKey: Type.String({ description: 'Session API Key' })
+    })
+  )
+});
+
 export const SessionTasksParamsSchema = Type.Object({
   sessionId: Type.String({ 
     description: 'Session ID for tasks' 
