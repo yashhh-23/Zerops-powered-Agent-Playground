@@ -1,11 +1,26 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { PlaygroundSession } from '@playground/types';
+import { useDebounce } from './useDebounce';
 
 const API = import.meta.env.VITE_API_URL || (
   window.location.hostname.includes('-3000')
     ? window.location.origin.replace('-3000', '-8080')
     : 'http://localhost:8080'
 );
+
+function readLocalSessions(): PlaygroundSession[] {
+  try {
+    const stored = localStorage.getItem('playground_sessions');
+    return stored ? JSON.parse(stored) : [];
+  } catch (e) {
+    console.error('[localStorage] Failed to parse sessions:', e);
+    return [];
+  }
+}
+
+function getApiKeyFor(id: string): string {
+  return (readLocalSessions().find(s => s.id === id) as any)?.apiKey || '';
+}
 
 async function safeFetch(url: string, init?: RequestInit): Promise<Response> {
   const r = await fetch(url, init);
@@ -38,6 +53,8 @@ export function useSessions() {
 
   const [approvingTaskId, setApprovingTaskId] = useState<string | null>(null);
 
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+
   const refreshHealth = useCallback(() => {
     setLoadingHealth(true);
     Promise.all([
@@ -53,10 +70,7 @@ export function useSessions() {
   const fetchSessionDetails = useCallback(async (id: string, silent = false) => {
     if (!silent) setLoadingDetails(true);
     try {
-      const stored = localStorage.getItem('playground_sessions');
-      const localSessions: PlaygroundSession[] = stored ? JSON.parse(stored) : [];
-      const session = localSessions.find(s => s.id === id);
-      const apiKey = (session as any)?.apiKey || '';
+      const apiKey = getApiKeyFor(id);
 
       const r = await safeFetch(`${API}/api/sessions/${id}`, {
         headers: { 'X-API-Key': apiKey }
@@ -74,8 +88,7 @@ export function useSessions() {
   const fetchSessions = useCallback(async () => {
     setLoadingSessions(true);
     try {
-      const stored = localStorage.getItem('playground_sessions');
-      const localSessions: PlaygroundSession[] = stored ? JSON.parse(stored) : [];
+      const localSessions = readLocalSessions();
       
       const updatedSessions = await Promise.all(
         localSessions.map(async (s) => {
@@ -111,8 +124,7 @@ export function useSessions() {
       });
       const s = await r.json();
       
-      const stored = localStorage.getItem('playground_sessions');
-      const localSessions = stored ? JSON.parse(stored) : [];
+      const localSessions = readLocalSessions();
       localSessions.unshift(s);
       localStorage.setItem('playground_sessions', JSON.stringify(localSessions));
 
@@ -140,8 +152,7 @@ export function useSessions() {
       const foundSession = data[0];
       const sessionWithKey = { ...foundSession, apiKey: importApiKey.trim() };
 
-      const stored = localStorage.getItem('playground_sessions');
-      const localSessions = stored ? JSON.parse(stored) : [];
+      const localSessions = readLocalSessions();
       
       if (!localSessions.some((s: any) => s.id === sessionWithKey.id)) {
         localSessions.unshift(sessionWithKey);
@@ -159,10 +170,7 @@ export function useSessions() {
     if (!prompt.trim() || !activeSessionId || runningTask) return;
     setRunningTask(true);
     try {
-      const stored = localStorage.getItem('playground_sessions');
-      const localSessions: PlaygroundSession[] = stored ? JSON.parse(stored) : [];
-      const session = localSessions.find(s => s.id === activeSessionId);
-      const apiKey = (session as any)?.apiKey || '';
+      const apiKey = getApiKeyFor(activeSessionId);
 
       await safeFetch(`${API}/api/sessions/${activeSessionId}/tasks`, {
         method: 'POST',
@@ -184,10 +192,7 @@ export function useSessions() {
     if (!activeSessionId) return;
     setApprovingTaskId(taskId);
     try {
-      const stored = localStorage.getItem('playground_sessions');
-      const localSessions: PlaygroundSession[] = stored ? JSON.parse(stored) : [];
-      const session = localSessions.find(s => s.id === activeSessionId);
-      const apiKey = (session as any)?.apiKey || '';
+      const apiKey = getApiKeyFor(activeSessionId);
 
       const r = await safeFetch(`${API}/api/tasks/${taskId}/approve`, {
         method: 'POST',
@@ -207,10 +212,7 @@ export function useSessions() {
   const rejectTask = useCallback(async (taskId: string) => {
     if (!activeSessionId) return;
     try {
-      const stored = localStorage.getItem('playground_sessions');
-      const localSessions: PlaygroundSession[] = stored ? JSON.parse(stored) : [];
-      const session = localSessions.find(s => s.id === activeSessionId);
-      const apiKey = (session as any)?.apiKey || '';
+      const apiKey = getApiKeyFor(activeSessionId);
 
       await safeFetch(`${API}/api/tasks/${taskId}/reject`, {
         method: 'POST',
@@ -236,7 +238,7 @@ export function useSessions() {
   }, [activeSessionId, fetchSessionDetails]);
 
   const filteredSessions = sessions.filter(s =>
-    s.name.toLowerCase().includes(searchQuery.toLowerCase())
+    s.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
   );
 
   return {

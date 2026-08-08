@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { useSessions } from './hooks/useSessions';
 import { useSessionSSE } from './hooks/useSessionSSE';
 import { SessionSidebar } from './components/SessionSidebar';
 import { PlaygroundPanel } from './components/PlaygroundPanel';
+import { SpinnerIcon } from './components/Icons';
 import './App.css';
 
 export default function App() {
@@ -32,6 +34,8 @@ export default function App() {
     approveTask,
     rejectTask,
   } = useSessions();
+
+  const [newTemplate, setNewTemplate] = useState('node-api-basic');
 
   const { isConnected, connectionError, dbHealth: sseDbHealth } = useSessionSSE({
     sessionId: activeSessionId,
@@ -72,6 +76,8 @@ export default function App() {
           loadingSessions={loadingSessions}
           refreshHealth={refreshHealth}
           isCreatingSession={isCreatingSession}
+          newTemplate={newTemplate}
+          setNewTemplate={setNewTemplate}
         />
 
         <main className="main" id="main-content">
@@ -79,40 +85,165 @@ export default function App() {
             /* Welcome screen */
             <div className="welcome">
               <div className="welcome-inner">
-                <span className="welcome-icon">
-                  <svg width="36" height="36" viewBox="0 0 24 24" fill="var(--accent)" role="img" aria-label="Playground lightning icon">
-                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-                  </svg>
-                </span>
-                <h1 className="welcome-title">Zerops Agent Playground</h1>
+                <div className="mini-diff-preview font-mono">
+                  <div className="mini-diff-line diff-line-ctx">
+                    <span className="diff-sign"> </span>
+                    <span>const config = {JSON.stringify({ port: 8080 })};</span>
+                  </div>
+                  <div className="mini-diff-line diff-line-del">
+                    <span className="diff-sign">-</span>
+                    <span>app.listen(config.port);</span>
+                  </div>
+                  <div className="mini-diff-line diff-line-add">
+                    <span className="diff-sign">+</span>
+                    <span>await app.listen({'{'} ...config, host: '0.0.0.0' {'}'});</span>
+                  </div>
+                </div>
+
+                <div className="welcome-brand">
+                  <span className="welcome-eyebrow">Zerops Agent Playground</span>
+                  <h1 className="welcome-title">Spin up your first agent</h1>
+                </div>
+
                 <p className="welcome-sub">
                   A sandbox for testing autonomous coding agents on live Zerops infrastructure.
                   Create a session, prompt the agent, review diffs, and deploy — all in one place.
                 </p>
+
                 <div className="welcome-steps">
                   {[
-                    ['Create a session', 'Pick a stack template and give your playground a name.'],
-                    ['Prompt the agent', 'Describe a code change — the agent will generate real diffs.'],
-                    ['Review & approve', 'Inspect code and infra diffs, then approve or reject.'],
-                    ['Auto-deploy', 'Approved diffs trigger a live Zerops deployment automatically.'],
-                  ].map(([title, desc], i) => (
+                    [
+                      'Create a session',
+                      'Pick a stack template and give your playground a name.',
+                      // Folder plus SVG icon
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                        <line x1="12" y1="11" x2="12" y2="17"></line>
+                        <line x1="9" y1="14" x2="15" y2="14"></line>
+                      </svg>
+                    ],
+                    [
+                      'Prompt the agent',
+                      'Describe a code change — the agent will generate real diffs.',
+                      // Message terminal icon
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="4 17 10 11 4 5"></polyline>
+                        <line x1="12" y1="19" x2="20" y2="19"></line>
+                      </svg>
+                    ],
+                    [
+                      'Review & approve',
+                      'Inspect code and infra diffs, then approve or reject.',
+                      // Check icon
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                      </svg>
+                    ],
+                    [
+                      'Auto-deploy',
+                      'Approved diffs trigger a live Zerops deployment automatically.',
+                      // Cloud/Rocket icon
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M18 11.034C18 7.15 14.867 4 11 4 7.748 4 5.039 6.223 4.29 9.227 2.443 9.877 1 11.603 1 13.657 1 16.056 2.944 18 5.344 18h12.312c2.4 0 4.344-1.944 4.344-4.343 0-2.222-1.66-4.053-3.877-4.29L18 11.034z"></path>
+                        <polyline points="9 13 12 10 15 13"></polyline>
+                        <line x1="12" y1="10" x2="12" y2="16"></line>
+                      </svg>
+                    ],
+                  ].map(([title, desc, icon], i) => (
                     <div className="welcome-step" key={i}>
-                      <div className="step-num">{i + 1}</div>
+                      <div className="step-num">{icon}</div>
                       <div className="step-text">
-                        <strong>{title}</strong> — {desc}
+                        <strong>{title as string}</strong> — {desc as string}
                       </div>
                     </div>
                   ))}
+                </div>
+
+                <button
+                  className="btn-accent welcome-cta-btn"
+                  onClick={() => {
+                    setNewTemplate('node-api-basic');
+                    setTimeout(() => {
+                      const input = document.querySelector('.session-name-input') as HTMLInputElement;
+                      input?.focus();
+                    }, 50);
+                  }}
+                  style={{ alignSelf: 'flex-start', marginTop: '4px' }}
+                >
+                  Create sandbox playground
+                </button>
+              </div>
+
+              {/* Second column: Live Preview Panel */}
+              <div className="welcome-preview-panel">
+                <div className="preview-header">
+                  <div className="preview-tabs">
+                    <span className="preview-tab active">health.ts</span>
+                    <span className="preview-tab">zerops.yaml</span>
+                  </div>
+                  <div className="preview-badge">Live Preview</div>
+                </div>
+                 <div className="preview-body font-mono">
+                  <div className="code-line">
+                    <span className="line-num">1</span>
+                    <span className="keyword">import</span>
+                    <span>{" { FastifyInstance } "}</span>
+                    <span className="keyword">from</span>
+                    <span className="string">"'fastify'"</span>;
+                  </div>
+                  <div className="code-line">
+                    <span className="line-num">2</span>
+                  </div>
+                  <div className="code-line">
+                    <span className="line-num">3</span>
+                    <span className="keyword">export async function</span>
+                    <span className="function">{" healthRoutes"}</span>
+                    <span>{"(fastify: FastifyInstance) {"}</span>
+                  </div>
+                  <div className="code-line remove-line">
+                    <span className="line-num">4</span>
+                    <span className="sign">-</span>
+                    <span>{"  fastify.get("}</span>
+                    <span className="string">"'/health'"</span>
+                    <span>{", "}</span>
+                    <span className="keyword">async</span>
+                    <span>{" () => ({ status: "}</span>
+                    <span className="string">"'running'"</span>
+                    <span>{" }));"}</span>
+                  </div>
+                  <div className="code-line add-line">
+                    <span className="line-num">5</span>
+                    <span className="sign">+</span>
+                    <span>{"  fastify.get("}</span>
+                    <span className="string">"'/health'"</span>
+                    <span>{", "}</span>
+                    <span className="keyword">async</span>
+                    <span>{" () => ({ status: "}</span>
+                    <span className="string">"'ok'"</span>
+                    <span>{", db: "}</span>
+                    <span className="string">"'connected'"</span>
+                    <span>{" }));"}</span>
+                  </div>
+                  <div className="code-line">
+                    <span className="line-num">6</span>
+                    <span>{"}"}</span>
+                  </div>
+                </div>
+                
+                <div className="preview-footer">
+                  <div className="preview-status">
+                    <span className="pulse-dot pulse-green"></span>
+                    <span>Ready for Deploy</span>
+                  </div>
+                  <div className="preview-actions">
+                    <button className="btn-success-mini" disabled>Approve & Deploy</button>
+                  </div>
                 </div>
               </div>
             </div>
           ) : loadingDetails && !activeSession ? (
             <div className="center-loader">
-              <span className="spinning" style={{ display: 'inline-flex' }} aria-label="Loading details spinner">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" role="img" aria-label="Loading spinner">
-                  <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-                </svg>
-              </span>
+              <SpinnerIcon size={18} />
               Loading playground…
             </div>
           ) : activeSession ? (

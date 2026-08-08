@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { CodeDiffPayload, InfraDiffPayload } from '@playground/types';
+import { CheckIcon } from './Icons';
 
 interface DiffViewerProps {
   codeDiffStr: string | null;
@@ -7,90 +8,168 @@ interface DiffViewerProps {
   deployStatus?: string | null;
 }
 
-function highlightLine(line: string): { __html: string } {
+// ─── Multi-language keyword sets ─────────────────────────────────────────────
+
+const KEYWORDS: Record<string, Set<string>> = {
+  js: new Set([
+    'const','let','var','function','return','import','from','export','default',
+    'class','extends','new','this','super','if','else','for','while','do',
+    'switch','case','break','continue','typeof','instanceof','in','of',
+    'async','await','try','catch','finally','throw','yield','delete','void',
+    'true','false','null','undefined','NaN','Infinity','static','get','set',
+  ]),
+  ts: new Set([
+    'const','let','var','function','return','import','from','export','default',
+    'class','extends','new','this','super','if','else','for','while','do',
+    'switch','case','break','continue','typeof','instanceof','in','of',
+    'async','await','try','catch','finally','throw','yield','delete','void',
+    'true','false','null','undefined','NaN','Infinity','static','get','set',
+    'type','interface','enum','namespace','declare','abstract','readonly',
+    'implements','as','any','never','unknown','infer','keyof',
+    'string','number','boolean','object','symbol','bigint',
+  ]),
+  go: new Set([
+    'package','import','func','return','var','const','type','struct','interface',
+    'map','chan','go','defer','select','case','default','for','range','if','else',
+    'switch','break','continue','fallthrough','goto','true','false','nil',
+    'make','new','append','len','cap','close','panic','recover','delete',
+    'string','int','int8','int16','int32','int64','uint','uint8','uint16',
+    'uint32','uint64','float32','float64','complex64','complex128','bool','byte','rune','error',
+  ]),
+  rust: new Set([
+    'fn','let','mut','const','static','struct','enum','trait','impl','for',
+    'use','mod','pub','crate','super','self','Self','in','where','match','if',
+    'else','while','loop','return','break','continue','async','await','move',
+    'ref','box','unsafe','extern','type','true','false','as','dyn',
+    'String','str','i8','i16','i32','i64','i128','u8','u16','u32','u64','u128',
+    'f32','f64','bool','char','usize','isize','Option','Some','None','Result','Ok','Err','Vec',
+  ]),
+  python: new Set([
+    'def','class','return','import','from','as','if','elif','else','for','while',
+    'try','except','finally','raise','with','yield','lambda','pass','break',
+    'continue','global','nonlocal','del','in','not','and','or','is','None',
+    'True','False','print','self','super','open','len','range','type','list',
+    'dict','set','tuple','str','int','float','bool','bytes',
+  ]),
+  java: new Set([
+    'public','private','protected','static','final','class','interface','extends',
+    'implements','abstract','new','return','import','package','void','int','long',
+    'short','byte','float','double','char','boolean','true','false','null',
+    'if','else','for','while','do','switch','case','default','break','continue',
+    'try','catch','finally','throw','throws','this','super','instanceof','enum',
+  ]),
+  yaml: new Set(['true','false','null','yes','no','on','off']),
+  shell: new Set([
+    'if','then','else','elif','fi','for','do','done','while','case','esac',
+    'function','return','exit','echo','export','source','set','unset','local',
+    'readonly','declare','shift','trap','exec','eval',
+  ]),
+};
+
+const LANG_BY_EXT: Record<string, keyof typeof KEYWORDS> = {
+  js: 'js', jsx: 'js', mjs: 'js',
+  ts: 'ts', tsx: 'ts',
+  go: 'go',
+  rs: 'rust',
+  py: 'python',
+  java: 'java',
+  yaml: 'yaml', yml: 'yaml',
+  sh: 'shell', bash: 'shell', zsh: 'shell',
+};
+
+function detectLang(filePath?: string): keyof typeof KEYWORDS {
+  if (!filePath) return 'js';
+  const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
+  return LANG_BY_EXT[ext] ?? 'js';
+}
+
+// ─── Per-line tokenizer ──────────────────────────────────────────────────────
+
+function highlightLine(line: string, lang: keyof typeof KEYWORDS = 'js'): { __html: string } {
   const prefix = line.charAt(0);
   const codeContent = (prefix === '+' || prefix === '-') ? line.slice(1) : line;
 
-  const escape = (text: string) => text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  const escape = (t: string) =>
+    t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+  const keywords = KEYWORDS[lang] ?? KEYWORDS.js;
   let result = '';
   let i = 0;
   const len = codeContent.length;
 
-  const keywords = new Set([
-    'const', 'let', 'var', 'function', 'return', 'import', 'from', 'export', 
-    'default', 'class', 'if', 'else', 'for', 'while', 'async', 'await', 
-    'def', 'print', 'try', 'except', 'as', 'true', 'false', 'null', 
-    'undefined', 'app', 'version', 'deploy', 'zcp', 'yaml', 'ports'
-  ]);
-
   while (i < len) {
     const char = codeContent[i];
 
-    // 1. Comments
-    if (char === '#' || (char === '/' && codeContent[i + 1] === '/')) {
+    // 1. Block comments /* … */
+    if (char === '/' && codeContent[i + 1] === '*') {
+      const end = codeContent.indexOf('*/', i + 2);
+      const comment = end === -1 ? codeContent.slice(i) : codeContent.slice(i, end + 2);
+      result += `<span class="hl-comment">${escape(comment)}</span>`;
+      i += comment.length;
+      continue;
+    }
+
+    // 2. Line comments // or #
+    if ((char === '/' && codeContent[i + 1] === '/') || char === '#') {
       result += `<span class="hl-comment">${escape(codeContent.slice(i))}</span>`;
       break;
     }
 
-    // 2. Strings
-    if (char === '"' || char === "'") {
+    // 3. Strings (single, double, backtick)
+    if (char === '"' || char === "'" || char === '`') {
       const quote = char;
-      let start = i;
+      const start = i;
       i++;
       while (i < len && codeContent[i] !== quote) {
         if (codeContent[i] === '\\') i++; // skip escaped char
         i++;
       }
       if (i < len) i++; // include closing quote
-      const strVal = codeContent.slice(start, i);
-      result += `<span class="hl-string">${escape(strVal)}</span>`;
+      result += `<span class="hl-string">${escape(codeContent.slice(start, i))}</span>`;
       continue;
     }
 
-    // 3. Numbers
+    // 4. Numbers (dec, hex, float, suffixed like 42u64, 0xFF)
     if (/\d/.test(char) && (i === 0 || !/[a-zA-Z0-9_]/.test(codeContent[i - 1]))) {
-      let start = i;
-      while (i < len && /\d/.test(codeContent[i])) {
-        i++;
-      }
+      const start = i;
+      while (i < len && /[\d._xXa-fA-FoObBlL]/.test(codeContent[i])) i++;
       result += `<span class="hl-number">${escape(codeContent.slice(start, i))}</span>`;
       continue;
     }
 
-    // 4. Words (Keywords or Functions or Identifiers)
+    // 5. Words: keywords / types / function calls / identifiers
     if (/[a-zA-Z_]/.test(char)) {
-      let start = i;
-      while (i < len && /[a-zA-Z0-9_]/.test(codeContent[i])) {
-        i++;
-      }
+      const start = i;
+      while (i < len && /[a-zA-Z0-9_]/.test(codeContent[i])) i++;
       const word = codeContent.slice(start, i);
-      
+
       if (keywords.has(word)) {
         result += `<span class="hl-keyword">${word}</span>`;
       } else if (i < len && codeContent[i] === '(') {
         result += `<span class="hl-function">${word}</span>`;
+      } else if (/^[A-Z]/.test(word)) {
+        // Capitalised → type-like in most languages
+        result += `<span class="hl-type">${word}</span>`;
       } else {
         result += escape(word);
       }
       continue;
     }
 
-    // 5. Operators, whitespace, punctuation
+    // 6. Everything else
     result += escape(char);
     i++;
   }
 
-  const prefixHtml = prefix === '+' ? '<span class="diff-sign">+</span>'
-                   : prefix === '-' ? '<span class="diff-sign">-</span>'
-                   : '<span class="diff-sign"> </span>';
+  const prefixHtml =
+    prefix === '+' ? '<span class="diff-sign">+</span>' :
+    prefix === '-' ? '<span class="diff-sign">-</span>' :
+                     '<span class="diff-sign"> </span>';
 
   return { __html: prefixHtml + result };
 }
 
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export function DiffViewer({ codeDiffStr, infraDiffStr, deployStatus }: DiffViewerProps) {
   const [collapsedFiles, setCollapsedFiles] = useState<Record<string, boolean>>({});
@@ -118,13 +197,17 @@ export function DiffViewer({ codeDiffStr, infraDiffStr, deployStatus }: DiffView
     return 'diff-act-update';
   };
 
-  const toggleFile = (path: string) => {
-    setCollapsedFiles(prev => ({
-      ...prev,
-      [path]: !prev[path]
-    }));
+  const getActionLabel = (act: string) => {
+    if (act === 'create') return 'ADDED';
+    if (act === 'delete') return 'DELETED';
+    return 'MODIFIED';
   };
 
+  const toggleFile = (path: string) => {
+    setCollapsedFiles(prev => ({ ...prev, [path]: !prev[path] }));
+  };
+
+  // ── Deploy progress bar ──────────────────────────────────────────────────
   const renderDeployProgress = () => {
     if (!deployStatus || deployStatus === 'pending') return null;
 
@@ -132,18 +215,21 @@ export function DiffViewer({ codeDiffStr, infraDiffStr, deployStatus }: DiffView
       { id: 'packaging', label: 'Packaging' },
       { id: 'uploading', label: 'Uploading' },
       { id: 'deploying', label: 'Deploying' },
-      { id: 'deployed', label: 'Done' }
+      { id: 'deployed', label: 'Done' },
     ];
+
+    const ORDER = ['packaging', 'uploading', 'deploying', 'deployed'];
 
     const getStepStatus = (stepId: string) => {
       if (deployStatus === 'failed') {
-        if (stepId === 'deploying') return 'failed';
+        const failedAt = ORDER.indexOf('deploying');
+        const stepIdx = ORDER.indexOf(stepId);
+        if (stepIdx < failedAt) return 'done';
+        if (stepIdx === failedAt) return 'failed';
+        return 'pending';
       }
-
-      const order = ['packaging', 'uploading', 'deploying', 'deployed'];
-      const currentIdx = order.indexOf(deployStatus);
-      const stepIdx = order.indexOf(stepId);
-
+      const currentIdx = ORDER.indexOf(deployStatus);
+      const stepIdx = ORDER.indexOf(stepId);
       if (stepIdx < currentIdx) return 'done';
       if (stepIdx === currentIdx) return 'active';
       return 'pending';
@@ -169,9 +255,7 @@ export function DiffViewer({ codeDiffStr, infraDiffStr, deployStatus }: DiffView
                 <div className={`progress-step-item ${status}`}>
                   <div className="step-circle">
                     {status === 'done' ? (
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
+                      <CheckIcon size={10} strokeWidth={4} />
                     ) : status === 'failed' ? (
                       '✕'
                     ) : status === 'active' ? (
@@ -183,7 +267,10 @@ export function DiffViewer({ codeDiffStr, infraDiffStr, deployStatus }: DiffView
                   <span className="step-label">{step.label}</span>
                 </div>
                 {idx < steps.length - 1 && (
-                  <div className={`step-connector ${getStepStatus(steps[idx + 1].id) === 'done' || getStepStatus(steps[idx + 1].id) === 'active' ? 'active' : ''}`} />
+                  <div className={`step-connector ${
+                    getStepStatus(steps[idx + 1].id) === 'done' || getStepStatus(steps[idx + 1].id) === 'active'
+                      ? 'active' : ''
+                  }`} />
                 )}
               </React.Fragment>
             );
@@ -193,15 +280,8 @@ export function DiffViewer({ codeDiffStr, infraDiffStr, deployStatus }: DiffView
     );
   };
 
-  const getActionLabel = (act: string) => {
-    if (act === 'create') return 'ADDED';
-    if (act === 'delete') return 'DELETED';
-    return 'MODIFIED';
-  };
-
   return (
     <div className="diff-viewer-wrapper">
-      {/* 4-Step Deploy Progress Indicators */}
       {renderDeployProgress()}
 
       <div className="diff-container">
@@ -216,23 +296,25 @@ export function DiffViewer({ codeDiffStr, infraDiffStr, deployStatus }: DiffView
 
         {codeDiff?.files?.map((file, idx) => {
           const isCollapsed = !!collapsedFiles[file.path];
+          const lang = detectLang(file.path);
           return (
             <div key={idx} className={`diff-file ${isCollapsed ? 'collapsed' : ''}`}>
               <div className="diff-file-header" onClick={() => toggleFile(file.path)} style={{ cursor: 'pointer' }}>
                 <span className="diff-file-path">
-                  <span className="collapse-arrow">
-                    {isCollapsed ? '▶' : '▼'}
-                  </span>
+                  <span className="collapse-arrow">{isCollapsed ? '▶' : '▼'}</span>
                   <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style={{ color: 'var(--text-secondary)', marginRight: '6px' }} role="img" aria-label="File icon">
                     <path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 8.75 4.25V1.5Zm6.75.103V4.25c0 .138.112.25.25.25h2.647Z"/>
                   </svg>
                   {file.path}
+                  {lang !== 'js' && (
+                    <span className="diff-lang-badge">{lang}</span>
+                  )}
                 </span>
                 <span className={`diff-action-tag ${actionClass(file.action || 'update')}`}>
                   {getActionLabel(file.action || 'update')}
                 </span>
               </div>
-              
+
               {!isCollapsed && (
                 <pre className="diff-code">
                   {file.diff?.split('\n').map((line, li) => {
@@ -243,7 +325,7 @@ export function DiffViewer({ codeDiffStr, infraDiffStr, deployStatus }: DiffView
                       <span
                         key={li}
                         className={cls}
-                        dangerouslySetInnerHTML={highlightLine(line)}
+                        dangerouslySetInnerHTML={highlightLine(line, lang)}
                       />
                     );
                   })}
@@ -266,9 +348,7 @@ export function DiffViewer({ codeDiffStr, infraDiffStr, deployStatus }: DiffView
           <div className={`infra-block ${infraCollapsed ? 'collapsed' : ''}`}>
             <div className="infra-header" onClick={() => setInfraCollapsed(!infraCollapsed)} style={{ cursor: 'pointer' }}>
               <span className="diff-file-path">
-                <span className="collapse-arrow">
-                  {infraCollapsed ? '▶' : '▼'}
-                </span>
+                <span className="collapse-arrow">{infraCollapsed ? '▶' : '▼'}</span>
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style={{ color: 'var(--amber)', marginRight: '6px' }} role="img" aria-label="Infrastructure icon">
                   <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Zm7-3.25v2.992l2.028.812a.75.75 0 0 1-.557 1.392l-2.5-1A.751.751 0 0 1 7 8.25v-3.5a.75.75 0 0 1 1.5 0Z"/>
                 </svg>
@@ -277,15 +357,13 @@ export function DiffViewer({ codeDiffStr, infraDiffStr, deployStatus }: DiffView
             </div>
             {!infraCollapsed && (
               <pre className="infra-code">
-                {infraDiff.zeropsYaml.split('\n').map((line, li) => {
-                  return (
-                    <span
-                      key={li}
-                      className="infra-line"
-                      dangerouslySetInnerHTML={highlightLine(line)}
-                    />
-                  );
-                })}
+                {infraDiff.zeropsYaml.split('\n').map((line, li) => (
+                  <span
+                    key={li}
+                    className="infra-line"
+                    dangerouslySetInnerHTML={highlightLine(line, 'yaml')}
+                  />
+                ))}
               </pre>
             )}
           </div>

@@ -84,6 +84,37 @@ fastify.addHook('onClose', async () => {
   await taskQueue.close();
 });
 
+// Auth / Ownership Helpers
+async function getOwnedSession(id: string, apiKey: string, includeTasks = false) {
+  const session = await prisma.playgroundSession.findFirst({
+    where: { id, apiKey },
+    ...(includeTasks ? {
+      include: {
+        agentTasks: {
+          orderBy: { createdAt: 'asc' }
+        }
+      }
+    } : {})
+  });
+  if (!session) {
+    throw new AppError('Session not found', 404);
+  }
+  return session;
+}
+
+async function getOwnedTask(id: string, apiKey: string) {
+  const task = await prisma.agentTask.findFirst({
+    where: {
+      id,
+      session: { apiKey },
+    },
+  });
+  if (!task) {
+    throw new AppError('Task not found', 404);
+  }
+  return task;
+}
+
 // Basic Health Check (Phase 0)
 fastify.get('/health', async () => {
   return { status: 'ok', service: 'api' };
@@ -159,20 +190,7 @@ fastify.get('/api/sessions/:id', {
   const { id } = request.params as { id: string };
   const apiKey = request.headers['x-api-key'] as string;
 
-  const session = await prisma.playgroundSession.findFirst({
-    where: { id, apiKey },
-    include: {
-      agentTasks: {
-        orderBy: {
-          createdAt: 'asc',
-        },
-      },
-    },
-  });
-
-  if (!session) {
-    throw new AppError('Session not found', 404);
-  }
+  const session = await getOwnedSession(id, apiKey, true);
   return session;
 });
 
@@ -194,13 +212,7 @@ fastify.get('/api/sessions/:id/events', {
   // This is acceptable here only because EventSource does not support custom headers natively.
   const apiKey = (request.headers['x-api-key'] || (request.query as any)?.apiKey) as string;
 
-  const session = await prisma.playgroundSession.findFirst({
-    where: { id: sessionId, apiKey },
-  });
-
-  if (!session) {
-    throw new AppError('Session not found', 404);
-  }
+  const session = await getOwnedSession(sessionId, apiKey);
 
   // Set SSE headers with manual CORS configuration to prevent browser blocking due to raw write bypass
   const origin = request.headers.origin;
@@ -303,13 +315,7 @@ fastify.post('/api/sessions/:sessionId/tasks', {
   const { prompt } = request.body as { prompt: string };
   const apiKey = request.headers['x-api-key'] as string;
 
-  const session = await prisma.playgroundSession.findFirst({
-    where: { id: sessionId, apiKey },
-  });
-
-  if (!session) {
-    throw new AppError('Session not found', 404);
-  }
+  await getOwnedSession(sessionId, apiKey);
 
   const task = await prisma.agentTask.create({
     data: {
@@ -337,13 +343,7 @@ fastify.get('/api/sessions/:sessionId/tasks', {
   const { sessionId } = request.params as { sessionId: string };
   const apiKey = request.headers['x-api-key'] as string;
 
-  const session = await prisma.playgroundSession.findFirst({
-    where: { id: sessionId, apiKey },
-  });
-
-  if (!session) {
-    throw new AppError('Session not found', 404);
-  }
+  await getOwnedSession(sessionId, apiKey);
 
   const tasks = await prisma.agentTask.findMany({
     where: { sessionId },
@@ -361,16 +361,7 @@ fastify.get('/api/tasks/:id', {
   const { id } = request.params as { id: string };
   const apiKey = request.headers['x-api-key'] as string;
 
-  const task = await prisma.agentTask.findFirst({
-    where: {
-      id,
-      session: { apiKey },
-    },
-  });
-
-  if (!task) {
-    throw new AppError('Task not found', 404);
-  }
+  const task = await getOwnedTask(id, apiKey);
   return task;
 });
 
@@ -389,16 +380,7 @@ fastify.post('/api/tasks/:id/approve', {
   const { id } = request.params as { id: string };
   const apiKey = request.headers['x-api-key'] as string;
 
-  const task = await prisma.agentTask.findFirst({
-    where: {
-      id,
-      session: { apiKey },
-    },
-  });
-
-  if (!task) {
-    throw new AppError('Task not found', 404);
-  }
+  const task = await getOwnedTask(id, apiKey);
 
   const updatedTask = await prisma.agentTask.update({
     where: { id },
@@ -446,16 +428,7 @@ fastify.post('/api/tasks/:id/reject', {
   const { id } = request.params as { id: string };
   const apiKey = request.headers['x-api-key'] as string;
 
-  const task = await prisma.agentTask.findFirst({
-    where: {
-      id,
-      session: { apiKey },
-    },
-  });
-
-  if (!task) {
-    throw new AppError('Task not found', 404);
-  }
+  const task = await getOwnedTask(id, apiKey);
 
   await prisma.agentTask.update({
     where: { id },

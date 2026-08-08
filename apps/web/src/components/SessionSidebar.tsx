@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { StatusBadge } from './StatusBadge';
 import type { PlaygroundSession } from '@playground/types';
+import { templateLabel, TEMPLATE_OPTIONS } from '@playground/types';
 import { formatRelativeTime } from '../utils/time';
 
 interface SessionSidebarProps {
@@ -17,6 +18,8 @@ interface SessionSidebarProps {
   loadingSessions: boolean;
   refreshHealth: () => void;
   isCreatingSession: boolean;
+  newTemplate: string;
+  setNewTemplate: (template: string) => void;
 }
 
 export function SessionSidebar({
@@ -32,12 +35,14 @@ export function SessionSidebar({
   loadingHealth,
   loadingSessions,
   refreshHealth,
-  isCreatingSession
+  isCreatingSession,
+  newTemplate,
+  setNewTemplate
 }: SessionSidebarProps) {
   const [newName, setNewName] = useState('');
-  const [newTemplate, setNewTemplate] = useState('node-api-basic');
   const [importKey, setImportKey] = useState('');
   const [isImporting, setIsImporting] = useState(false);
+  const [sortOrder, setSortOrder] = useState<'recent' | 'alpha' | 'oldest'>('recent');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,12 +62,6 @@ export function SessionSidebar({
 
   const dotClass = (status: string) =>
     status === 'active' ? 'dot-active' : status === 'completed' ? 'dot-completed' : 'dot-failed';
-
-  const templateLabel = (t: string) =>
-    t === 'node-api-basic' ? 'Node.js API'
-    : t === 'react-static-basic' ? 'React Static'
-    : t === 'python-api-basic' ? 'Python API'
-    : t;
 
   return (
     <aside className="sidebar" aria-label="Sidebar navigation">
@@ -123,7 +122,7 @@ export function SessionSidebar({
             <label htmlFor="input-session-name" className="visually-hidden">Playground Session Name</label>
             <input
               id="input-session-name"
-              className="field-input"
+              className="field-input session-name-input"
               type="text"
               placeholder="Session name…"
               value={newName}
@@ -134,47 +133,28 @@ export function SessionSidebar({
             
             <span className="field-help-label">Select Stack Template</span>
             <div className="template-cards">
-              <div
-                className={`template-card ${newTemplate === 'node-api-basic' ? 'selected' : ''}`}
-                onClick={() => !isCreatingSession && setNewTemplate('node-api-basic')}
-                role="radio"
-                aria-checked={newTemplate === 'node-api-basic'}
-                tabIndex={0}
-              >
-                <div className="template-card-header">
-                  <span className="template-icon">🟢</span>
-                  <span className="template-card-title">Node.js API</span>
+              {TEMPLATE_OPTIONS.map((opt) => (
+                <div
+                  key={opt.key}
+                  className={`template-card ${newTemplate === opt.key ? 'selected' : ''}`}
+                  onClick={() => !isCreatingSession && setNewTemplate(opt.key)}
+                  role="radio"
+                  aria-checked={newTemplate === opt.key}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      if (!isCreatingSession) setNewTemplate(opt.key);
+                    }
+                  }}
+                >
+                  <div className="template-card-header">
+                    <span className="template-icon">{opt.icon}</span>
+                    <span className="template-card-title">{opt.title}</span>
+                  </div>
+                  <p className="template-card-desc">{opt.desc}</p>
                 </div>
-                <p className="template-card-desc">Fastify backend, Postgres DB, port 8080</p>
-              </div>
-
-              <div
-                className={`template-card ${newTemplate === 'react-static-basic' ? 'selected' : ''}`}
-                onClick={() => !isCreatingSession && setNewTemplate('react-static-basic')}
-                role="radio"
-                aria-checked={newTemplate === 'react-static-basic'}
-                tabIndex={0}
-              >
-                <div className="template-card-header">
-                  <span className="template-icon">⚛️</span>
-                  <span className="template-card-title">React Static</span>
-                </div>
-                <p className="template-card-desc">Vite frontend app, static files, port 3000</p>
-              </div>
-
-              <div
-                className={`template-card ${newTemplate === 'python-api-basic' ? 'selected' : ''}`}
-                onClick={() => !isCreatingSession && setNewTemplate('python-api-basic')}
-                role="radio"
-                aria-checked={newTemplate === 'python-api-basic'}
-                tabIndex={0}
-              >
-                <div className="template-card-header">
-                  <span className="template-icon">🐍</span>
-                  <span className="template-card-title">Python API</span>
-                </div>
-                <p className="template-card-desc">FastAPI backend application, port 8000</p>
-              </div>
+              ))}
             </div>
             
             <button id="btn-create-session" type="submit" className="btn-primary" disabled={isCreatingSession || !newName.trim()}>
@@ -213,6 +193,32 @@ export function SessionSidebar({
               <span id="playgrounds-heading">Playgrounds</span>
               <span className="tasks-count">{sessions.length}</span>
             </div>
+            <div className="sort-toggle" role="group" aria-label="Sort sessions">
+              <button
+                className={`sort-btn ${sortOrder === 'recent' ? 'sort-active' : ''}`}
+                onClick={() => setSortOrder('recent')}
+                title="Sort by recently active"
+                aria-pressed={sortOrder === 'recent'}
+              >
+                Recent
+              </button>
+              <button
+                className={`sort-btn ${sortOrder === 'alpha' ? 'sort-active' : ''}`}
+                onClick={() => setSortOrder('alpha')}
+                title="Sort alphabetically"
+                aria-pressed={sortOrder === 'alpha'}
+              >
+                A–Z
+              </button>
+              <button
+                className={`sort-btn ${sortOrder === 'oldest' ? 'sort-active' : ''}`}
+                onClick={() => setSortOrder('oldest')}
+                title="Sort by oldest first"
+                aria-pressed={sortOrder === 'oldest'}
+              >
+                Oldest
+              </button>
+            </div>
           </div>
 
           <div className="search-container">
@@ -226,13 +232,20 @@ export function SessionSidebar({
             />
           </div>
 
-          {loadingSessions ? (
+          {(() => {
+            const sorted = [...sessions].sort((a, b) => {
+              if (sortOrder === 'alpha') return a.name.localeCompare(b.name);
+              if (sortOrder === 'oldest') return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+              return new Date(b.updatedAt ?? b.createdAt).getTime() - new Date(a.updatedAt ?? a.createdAt).getTime();
+            });
+
+          return loadingSessions ? (
             <div className="empty-text">Loading…</div>
-          ) : sessions.length === 0 ? (
+          ) : sorted.length === 0 ? (
             <div className="empty-text">{searchQuery ? 'No matching playgrounds found.' : 'No sessions yet.'}</div>
           ) : (
             <div className="session-list" role="listbox" aria-label="Playground sessions list">
-              {sessions.map(s => (
+              {sorted.map(s => (
                 <div
                   key={s.id}
                   id={`session-item-${s.id}`}
@@ -263,7 +276,8 @@ export function SessionSidebar({
                 </div>
               ))}
             </div>
-          )}
+          );
+          })()}
 
           {/* Browser Warning Note */}
           <div className="sidebar-warning-note">

@@ -78,7 +78,7 @@ export async function createZeropsProject(sessionName: string): Promise<string> 
   console.log(`[Zerops] Creating project "${projectName}" on Zerops...`);
 
   try {
-    const response = await fetch(`${API_BASE_URL}/project`, {
+    const response = await fetch(`${API_BASE_URL}/client/${clientId}/project`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -86,7 +86,6 @@ export async function createZeropsProject(sessionName: string): Promise<string> 
       },
       body: JSON.stringify({
         name: projectName,
-        clientId: clientId,
       }),
     });
 
@@ -139,9 +138,31 @@ export async function applyInfraDiff(
     if (onProgress) await onProgress('packaging');
     zipPath = await createDeploymentZip(infraDiff.zeropsYaml);
 
-    // 2. Create app version and get storage URL
-    console.log(`[Zerops] Creating app version for project: ${projectId}...`);
-    const versionResponse = await fetch(`${API_BASE_URL}/project/${projectId}/app-version`, {
+    // 2. Fetch service stacks to locate the target application runtime service
+    console.log(`[Zerops] Fetching service stacks for project: ${projectId}...`);
+    const servicesRes = await fetch(`${API_BASE_URL}/project/${projectId}/service-stack`, {
+      headers: {
+        'Authorization': `Bearer ${apiToken}`,
+      },
+    });
+
+    if (!servicesRes.ok) {
+      const errorText = await servicesRes.text();
+      throw new Error(`Failed to list service stacks for project (${servicesRes.status}): ${errorText}`);
+    }
+
+    const servicesData: any = await servicesRes.json();
+    const serviceStacks = servicesData.items || [];
+    const targetStack = serviceStacks.find((s: any) => !s.isSystem && !s.coreService?.isSystem);
+
+    if (!targetStack) {
+      throw new Error(`No deployable runtime service stack found in project ${projectId}`);
+    }
+
+    const serviceStackId = targetStack.id;
+    console.log(`[Zerops] Creating app version for service stack: ${targetStack.name} (${serviceStackId})...`);
+
+    const versionResponse = await fetch(`${API_BASE_URL}/service-stack/${serviceStackId}/app-version`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -183,10 +204,10 @@ export async function applyInfraDiff(
 
     console.log(`[Zerops] ZIP upload complete. Triggering build/deploy pipeline...`);
 
-    // 4. Trigger build / deploy pipeline
+    // 4. Trigger build / deploy pipeline (using PUT method)
     if (onProgress) await onProgress('deploying');
     const deployResponse = await fetch(`${API_BASE_URL}/app-version/${versionId}/deploy`, {
-      method: 'POST',
+      method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiToken}`,

@@ -3,6 +3,8 @@ import { ConnectionStatus } from './ConnectionStatus';
 import { TaskBadge } from './TaskBadge';
 import { DiffViewer } from './DiffViewer';
 import type { PlaygroundSession, AgentTask } from '@playground/types';
+import { templateLabel } from '@playground/types';
+import { CheckIcon, CrossIcon, SpinnerIcon } from './Icons';
 
 interface PlaygroundPanelProps {
   session: PlaygroundSession;
@@ -74,12 +76,6 @@ export function PlaygroundPanel({
     setTimeout(() => setCopiedKey(false), 1500);
   };
 
-  const templateLabel = (t: string) =>
-    t === 'node-api-basic' ? 'Node.js API'
-    : t === 'react-static-basic' ? 'React Static'
-    : t === 'python-api-basic' ? 'Python API'
-    : t;
-
   // Render clickable prompt suggestions based on template
   const getPromptChips = () => {
     switch (session.template) {
@@ -118,10 +114,12 @@ export function PlaygroundPanel({
       return "🔒 Edits locked. This session has been completed.";
     }
     if (session.status === 'failed') {
-      return "🔒 Edits locked. The playground environment failed.";
+      return "⚠️ Session failed. Deployments are disabled.";
     }
-    return "🔒 Edits locked. Playground session is updating.";
+    return null;
   };
+
+  const lockedMessage = getLockedMessage();
 
   return (
     <div className="playground" id="playground-panel">
@@ -137,9 +135,7 @@ export function PlaygroundPanel({
                 <code>sess_{session.id.slice(0, 4)}...{session.id.slice(-4)}</code>
                 <span className="copy-icon">
                   {copiedId ? (
-                    <svg className="checkmark" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
+                    <CheckIcon size={10} className="checkmark" />
                   ) : (
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                       <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
@@ -156,9 +152,7 @@ export function PlaygroundPanel({
                 <code>{session.apiKey ? `${session.apiKey.slice(0, 6)}...` : 'Hidden'}</code>
                 <span className="copy-icon">
                   {copiedKey ? (
-                    <svg className="checkmark" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
+                    <CheckIcon size={10} className="checkmark" />
                   ) : (
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                       <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
@@ -175,55 +169,49 @@ export function PlaygroundPanel({
           </div>
         </div>
 
-        <div className="pg-topbar-actions" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <ConnectionStatus isConnected={isConnected} error={connectionError} />
-          
-          <span className={`pill ${session.status === 'active' ? 'pill-green' : session.status === 'completed' ? 'pill-blue' : 'pill-red'}`} id="session-status-badge">
-            {session.status}
-          </span>
-        </div>
+        <ConnectionStatus isConnected={isConnected} error={connectionError} />
       </div>
 
-      {/* Main workspace splits */}
-      <div className="pg-workspace">
-        {/* Left panel: Prompt input & details */}
+      <div className="pg-grid">
+        {/* Left panel: Prompt input */}
         <div className="pg-panel pg-left">
-          <section aria-labelledby="run-agent-heading" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <section aria-labelledby="prompt-heading" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <div className="panel-header">
-              <h2 id="run-agent-heading" className="panel-title">Run Coding Agent</h2>
-              <p className="panel-subtitle">Describe a code or architectural change to run the agent.</p>
+              <h2 id="prompt-heading" className="panel-title">Prompt Coding Agent</h2>
+              <p className="panel-subtitle">Describe the changes you want. The agent will propose code and infra diffs.</p>
             </div>
 
-            <div className="panel-body" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <form className="prompt-form" onSubmit={handleRunAgentSubmit} id="form-run-agent" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column' }}>
-                  <label htmlFor="agent-task-input" className="visually-hidden">Describe changes you want the agent to make</label>
+            <div className="panel-body">
+              {lockedMessage && (
+                <div className="locked-banner" role="alert">
+                  {lockedMessage}
+                </div>
+              )}
+
+              <form onSubmit={handleRunAgentSubmit} className="prompt-form" id="form-run-agent">
+                <div className={`prompt-textarea-container ${session.status !== 'active' ? 'disabled' : ''}`}>
+                  <label htmlFor="textarea-prompt" className="visually-hidden">Prompt instructions for the agent</label>
                   <textarea
-                    id="agent-task-input"
+                    id="textarea-prompt"
                     className="prompt-textarea"
-                    placeholder={PLACEHOLDERS[placeholderIndex]}
+                    placeholder={`e.g. "${PLACEHOLDERS[placeholderIndex]}"`}
                     value={taskPrompt}
                     onChange={e => setTaskPrompt(e.target.value)}
                     onKeyDown={handleKeyDown}
                     disabled={runningTask || session.status !== 'active'}
+                    rows={6}
+                    required
                   />
-                  
-                  {session.status !== 'active' && (
-                    <div className="prompt-locked-banner">
-                      {getLockedMessage()}
-                    </div>
-                  )}
 
-                  {/* Suggestion Chips */}
                   {session.status === 'active' && (
-                    <div className="prompt-suggestions">
-                      <span className="suggestions-label">Try asking:</span>
-                      <div className="suggestions-chips">
+                    <div className="prompt-chips-container">
+                      <span className="chips-label">Suggestions:</span>
+                      <div className="prompt-chips">
                         {chips.map((chipText, i) => (
                           <button
                             key={i}
                             type="button"
-                            className="suggestion-chip"
+                            className="prompt-chip"
                             onClick={() => !runningTask && setTaskPrompt(chipText)}
                             disabled={runningTask}
                           >
@@ -246,11 +234,7 @@ export function PlaygroundPanel({
                     >
                       {runningTask ? (
                         <>
-                          <span className="spinning" style={{ display: 'inline-flex', marginRight: 5 }} aria-label="Running spinner">
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" role="img" aria-label="Spinner">
-                              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-                            </svg>
-                          </span>
+                          <SpinnerIcon size={10} style={{ marginRight: 5 }} />
                           Running Agent...
                         </>
                       ) : (
@@ -314,16 +298,14 @@ export function PlaygroundPanel({
                             <>
                               {task.deployStatus === 'packaging' || task.deployStatus === 'uploading' || task.deployStatus === 'deploying' ? (
                                 <span className="task-decision decision-deploying">
-                                  <span className="spinning" style={{ display: 'inline-flex', marginRight: 5 }} aria-label="Deploying spinner">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" role="img" aria-label="Spinner"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-                                  </span>
+                                  <SpinnerIcon size={12} strokeWidth={3} style={{ marginRight: 5 }} />
                                   {task.deployStatus === 'packaging' ? 'Packaging Build...'
                                    : task.deployStatus === 'uploading' ? 'Uploading Archive...'
                                    : 'Deploying to Zerops...'}
                                 </span>
                               ) : task.deployStatus === 'deployed' ? (
                                 <span className="task-decision decision-approved">
-                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 5, verticalAlign: 'middle' }} role="img" aria-label="Checkmark"><polyline points="20 6 9 17 4 12"/></svg>
+                                  <CheckIcon size={12} style={{ marginRight: 5, verticalAlign: 'middle' }} />
                                   Approved & Deployed
                                 </span>
                               ) : task.deployStatus === 'failed' ? (
@@ -333,21 +315,19 @@ export function PlaygroundPanel({
                                 </span>
                               ) : (
                                 <span className="task-decision decision-approved">
-                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 5, verticalAlign: 'middle' }} role="img" aria-label="Checkmark"><polyline points="20 6 9 17 4 12"/></svg>
+                                  <CheckIcon size={12} style={{ marginRight: 5, verticalAlign: 'middle' }} />
                                   Approved
                                 </span>
                               )}
                             </>
                           ) : task.approved === false ? (
                             <span className="task-decision decision-rejected">
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" style={{ marginRight: 5, verticalAlign: 'middle' }} role="img" aria-label="Cross"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                              <CrossIcon size={12} style={{ marginRight: 5, verticalAlign: 'middle' }} />
                                 Rejected
                             </span>
                           ) : approvingTaskId === task.id ? (
                             <span className="task-decision decision-deploying">
-                              <span className="spinning" style={{ display: 'inline-flex', marginRight: 5 }} aria-label="Deploying spinner">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" role="img" aria-label="Spinner"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-                              </span>
+                              <SpinnerIcon size={12} strokeWidth={3} style={{ marginRight: 5 }} />
                               Triggering Deploy...
                             </span>
                           ) : (
@@ -357,7 +337,7 @@ export function PlaygroundPanel({
                                 className="btn-success"
                                 onClick={() => onApproveTask(task.id)}
                               >
-                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 5, verticalAlign: 'middle' }} role="img" aria-label="Check icon"><polyline points="20 6 9 17 4 12"/></svg>
+                                <CheckIcon size={11} style={{ marginRight: 5, verticalAlign: 'middle' }} />
                                 Approve & Deploy
                               </button>
                               <button
@@ -365,7 +345,7 @@ export function PlaygroundPanel({
                                 className="btn-danger"
                                 onClick={() => onRejectTask(task.id)}
                               >
-                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" style={{ marginRight: 5, verticalAlign: 'middle' }} role="img" aria-label="Cross icon"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                <CrossIcon size={11} style={{ marginRight: 5, verticalAlign: 'middle' }} />
                                 Reject
                               </button>
                             </div>
