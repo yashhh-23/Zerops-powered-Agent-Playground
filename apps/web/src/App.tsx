@@ -37,8 +37,9 @@ export default function App() {
   } = useSessions();
 
   const [newTemplate, setNewTemplate] = useState('node-api-basic');
-  const [previewTab, setPreviewTab] = useState<'health.ts' | 'zerops.yaml'>('health.ts');
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [previewTab, setPreviewTab] = useState<'health' | 'yaml'>('yaml');
 
   const { isConnected, connectionError, dbHealth: sseDbHealth } = useSessionSSE({
     sessionId: activeSessionId,
@@ -201,42 +202,57 @@ export default function App() {
               <div className="welcome-preview-panel">
                 <div className="preview-header">
                   <div className="preview-tabs">
-                    <span 
-                      className={`preview-tab ${previewTab === 'health.ts' ? 'active' : ''}`}
-                      onClick={() => setPreviewTab('health.ts')}
+                    <button 
+                      className={`preview-tab ${previewTab === 'health' ? 'active' : ''}`}
+                      onClick={() => setPreviewTab('health')}
                     >
                       health.ts
-                    </span>
-                    <span 
-                      className={`preview-tab ${previewTab === 'zerops.yaml' ? 'active' : ''}`}
-                      onClick={() => setPreviewTab('zerops.yaml')}
+                    </button>
+                    <button 
+                      className={`preview-tab ${previewTab === 'yaml' ? 'active' : ''}`}
+                      onClick={() => setPreviewTab('yaml')}
                     >
                       zerops.yaml
-                    </span>
+                    </button>
                   </div>
                   <div className="preview-badge">Example Output</div>
                 </div>
 
-                {previewTab === 'health.ts' ? (
-                  <pre className="diff-code" style={{ flex: 1, padding: '16px', background: 'rgba(0, 0, 0, 0.15)', margin: 0, overflowX: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <DiffLine line=" import { FastifyInstance } from 'fastify';" lang="ts" className="preview-diff-line" />
-                    <DiffLine line=" " lang="ts" className="preview-diff-line" />
-                    <DiffLine line=" export async function healthRoutes(fastify: FastifyInstance) {" lang="ts" className="preview-diff-line" />
-                    <DiffLine line="-  fastify.get('/health', async () => ({ status: 'running' }));" lang="ts" className="preview-diff-line" />
-                    <DiffLine line="+  fastify.get('/health', async () => ({ status: 'ok', db: 'connected' }));" lang="ts" className="preview-diff-line" />
-                    <DiffLine line=" }" lang="ts" className="preview-diff-line" />
-                  </pre>
-                ) : (
-                  <pre className="diff-code" style={{ flex: 1, padding: '16px', background: 'rgba(0, 0, 0, 0.15)', margin: 0, overflowX: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <DiffLine line=" zerops:" lang="yaml" className="preview-diff-line" />
-                    <DiffLine line="   - setup: api" lang="yaml" className="preview-diff-line" />
-                    <DiffLine line="     run:" lang="yaml" className="preview-diff-line" />
-                    <DiffLine line="       ports:" lang="yaml" className="preview-diff-line" />
-                    <DiffLine line="-        - port: 3000" lang="yaml" className="preview-diff-line" />
-                    <DiffLine line="+        - port: 8080" lang="yaml" className="preview-diff-line" />
-                    <DiffLine line="           httpSupport: true" lang="yaml" className="preview-diff-line" />
-                  </pre>
-                )}
+                <div 
+                  className="diff-code-scroll-container" 
+                  style={{ 
+                    flex: 1, 
+                    overflowY: 'auto', 
+                    background: 'var(--bg-elevated)', 
+                    margin: 0,
+                    padding: '24px 0'
+                  }}
+                >
+                  {previewTab === 'health' ? (
+                    <div style={{ borderLeft: '1px dashed var(--border)', marginLeft: '32px', paddingLeft: '16px' }}>
+                      <pre className="diff-code" style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <DiffLine line=" import { FastifyInstance } from 'fastify';" lang="ts" className="preview-diff-line" />
+                        <DiffLine line=" " lang="ts" className="preview-diff-line" />
+                        <DiffLine line=" export async function healthRoutes(fastify: FastifyInstance) {" lang="ts" className="preview-diff-line" />
+                        <DiffLine line="-  fastify.get('/health', async () => ({ status: 'running' }));" lang="ts" className="preview-diff-line" />
+                        <DiffLine line="+  fastify.get('/health', async () => ({ status: 'ok', db: 'connected' }));" lang="ts" className="preview-diff-line" />
+                        <DiffLine line=" }" lang="ts" className="preview-diff-line" />
+                      </pre>
+                    </div>
+                  ) : (
+                    <div style={{ borderLeft: '1px dashed var(--border)', marginLeft: '32px', paddingLeft: '16px' }}>
+                      <pre className="diff-code" style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <DiffLine line=" zerops:" lang="yaml" className="preview-diff-line" />
+                        <DiffLine line="   - setup: api" lang="yaml" className="preview-diff-line" />
+                        <DiffLine line="     run:" lang="yaml" className="preview-diff-line" />
+                        <DiffLine line="       ports:" lang="yaml" className="preview-diff-line" />
+                        <DiffLine line="-        - port: 3000" lang="yaml" className="preview-diff-line" />
+                        <DiffLine line="+        - port: 8080" lang="yaml" className="preview-diff-line" />
+                        <DiffLine line="           httpSupport: true" lang="yaml" className="preview-diff-line" />
+                      </pre>
+                    </div>
+                  )}
+                </div>
                 
                 <div className="preview-footer">
                   <div className="preview-status">

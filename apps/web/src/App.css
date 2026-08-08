@@ -28,7 +28,7 @@
   gap: var(--space-sm);
   padding: var(--space-md) var(--space-md);
   border-bottom: 1px solid var(--border);
-  background: linear-gradient(135deg, rgba(5, 8, 15, 0.6) 0%, rgba(var(--accent-rgb), 0.04) 100%);
+  background: linear-gradient(135deg, var(--bg-surface) 0%, rgba(var(--accent-rgb), 0.04) 100%);
   position: relative;
   overflow: hidden;
 }
@@ -287,9 +287,9 @@
 
 .template-card:hover {
   border-color: var(--border-hover);
-  background: rgba(25, 35, 58, 0.3);
+  background: var(--bg-subtle);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .template-card:active {
@@ -387,8 +387,8 @@
   margin-top: auto;
   padding: 10px 12px;
   border-radius: var(--radius-interactive);
-  background: rgba(245, 158, 11, 0.03);
-  border: 1px solid rgba(245, 158, 11, 0.1);
+  background: var(--amber-dim);
+  border: 1px solid rgba(245, 158, 11, 0.2);
   color: var(--amber);
   font-size: 10px;
   line-height: 1.4;
@@ -900,7 +900,7 @@
 }
 
 .pg-right {
-  background: #060912;
+  background: var(--bg-surface);
 }
 
 .panel-header {
@@ -1671,7 +1671,7 @@ textarea:focus-visible,
 }
 
 .bento-card {
-  background: rgba(16, 21, 36, 0.4);
+  background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-interactive);
   padding: 10px 12px;
@@ -1687,7 +1687,7 @@ textarea:focus-visible,
 
 .bento-card:hover {
   border-color: var(--border-hover);
-  background-color: rgba(25, 35, 58, 0.25);
+  background-color: var(--bg-subtle);
   transform: translateY(-1px);
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
 }
@@ -1705,7 +1705,7 @@ textarea:focus-visible,
   align-items: center;
   justify-content: center;
   text-align: center;
-  background: linear-gradient(135deg, rgba(16, 21, 36, 0.4) 0%, rgba(var(--accent-rgb), 0.03) 100%);
+  background: linear-gradient(135deg, var(--bg-elevated) 0%, rgba(var(--accent-rgb), 0.03) 100%);
 }
 
 .bento-host {
@@ -1869,11 +1869,11 @@ button:hover .tech-icon,
 
 /* ── Gradient hover overlay for sidebar items ── */
 .session-item:hover {
-  background: linear-gradient(90deg, rgba(25, 35, 58, 0.3) 0%, rgba(var(--accent-rgb), 0.03) 100%);
+  background: linear-gradient(90deg, var(--bg-subtle) 0%, rgba(var(--accent-rgb), 0.03) 100%);
 }
 
 .template-card:hover {
-  background: linear-gradient(135deg, rgba(25, 35, 58, 0.3) 0%, rgba(var(--accent-rgb), 0.02) 100%);
+  background: linear-gradient(135deg, var(--bg-subtle) 0%, rgba(var(--accent-rgb), 0.02) 100%);
 }
 
 /* ── Refine Form Elements ── */
@@ -1985,8 +1985,6 @@ button:hover .tech-icon,
   padding-left: var(--space-sm);
   white-space: pre-wrap;
   word-break: break-all;
-  display: flex;
-  align-items: center;
 }
 
 .infra-line-container {
