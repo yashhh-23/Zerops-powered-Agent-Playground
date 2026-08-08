@@ -259,9 +259,7 @@ export default function App() {
                     <span className="pulse-dot pulse-green"></span>
                     <span>Ready for Deploy</span>
                   </div>
-                  <div className="preview-actions">
-                    <button className="btn-success-mini" disabled>Approve & Deploy</button>
-                  </div>
+                  <button className="btn-success-mini" disabled>Approve & Deploy</button>
                 </div>
               </div>
             </div>
