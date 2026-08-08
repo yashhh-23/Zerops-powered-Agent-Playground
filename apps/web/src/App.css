@@ -651,6 +651,27 @@
   font-size: 11px;
   padding: 4px 8px;
   border-radius: var(--radius-interactive);
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.btn-success-mini:hover {
+  opacity: 0.9;
+}
+
+.btn-success-mini:active {
+  transform: scale(0.98);
+}
+
+.btn-success-mini:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.preview-diff-line {
+  display: block;
+  font-size: 11px;
 }
 
 @media (max-width: 1024px) {
