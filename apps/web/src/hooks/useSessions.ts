@@ -196,6 +196,14 @@ export function useSessions() {
     fetchSessions();
   }, [refreshHealth, fetchSessions]);
 
+  useEffect(() => {
+    if (activeSessionId) {
+      fetchSessionDetails(activeSessionId).catch(() => {});
+    } else {
+      setActiveSession(null);
+    }
+  }, [activeSessionId, fetchSessionDetails]);
+
   return {
     API,
     sessions,

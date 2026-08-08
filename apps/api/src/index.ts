@@ -199,8 +199,13 @@ fastify.get('/api/sessions/:id/events', {
     throw new AppError('Session not found', 404);
   }
 
-  // Set SSE headers
+  // Set SSE headers with manual CORS configuration to prevent browser blocking due to raw write bypass
+  const origin = request.headers.origin;
   reply.raw.writeHead(200, {
+    'Access-Control-Allow-Origin': origin || '*',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Credentials': 'true',
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache, no-transform',
     'Connection': 'keep-alive',
