@@ -37,6 +37,14 @@ graph TD
 
 ---
 
+## 🧪 Testing the Live Demo
+
+If you are testing the **public live deployment** (e.g., at `https://zcp-2a7e-3000.prg1.zerops.app/`), please note the following:
+* **Simulated Deployment:** For security and billing reasons, the public URL runs in a safe "sandbox" mode. When you click **"Approve & Deploy"**, the backend simulates the deployment orchestration (Packaging ➔ Uploading ➔ Deploying ➔ Done) so you can experience the exact UI/UX and pipeline flow without provisioning real cloud resources. 
+* **Real Deployments:** If you wish to test a real, end-to-end cloud deployment, you must clone this repository, configure your own `ZEROPS_API_TOKEN` in the `.env` file, and run the platform locally. The backend will then execute real API calls and deploy the generated code to your personal Zerops account.
+
+---
+
 ## ⚙️ Prerequisites
 
 * **Node.js** (v20 or higher)
